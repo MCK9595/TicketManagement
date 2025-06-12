@@ -1,0 +1,391 @@
+﻿@page "/projects/{ProjectId:guid}"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<PageTitle>@(project?.Name ?? "Project") - Ticket Management</PageTitle>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading project...</p>
+    </div>
+}
+else if (project != null)
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/projects">Projects</a></li>
+                    <li class="breadcrumb-item active">@project.Name</li>
+                </ol>
+            </nav>
+            <h1><span class="bi bi-folder-open" aria-hidden="true"></span> @project.Name</h1>
+        </div>
+        <button class="btn btn-primary" @onclick="ShowCreateTicketModal">
+            <span class="bi bi-plus-circle" aria-hidden="true"></span> New Ticket
+        </button>
+    </div>
+
+    <!-- Project Info -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Project Information</h5>
+                    <p class="card-text">@project.Description</p>
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <small class="text-muted">Created: @project.CreatedAt.ToString("MMM dd, yyyy")</small>
+                        </div>
+                        <div class="col-sm-6 text-end">
+                            <span class="badge bg-@(project.IsActive ? "success" : "secondary")">
+                                @(project.IsActive ? "Active" : "Inactive")
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Quick Stats</h5>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Total Tickets:</span>
+                        <span class="badge bg-primary">@(tickets?.Count ?? 0)</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Open:</span>
+                        <span class="badge bg-success">@(tickets?.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Open) ?? 0)</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>In Progress:</span>
+                        <span class="badge bg-warning">@(tickets?.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.InProgress) ?? 0)</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Closed:</span>
+                        <span class="badge bg-secondary">@(tickets?.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Closed) ?? 0)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tickets Table -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Tickets</h5>
+            <div class="d-flex gap-2">
+                <div class="input-group input-group-sm" style="width: 250px;">
+                    <input type="text" class="form-control" placeholder="Search tickets..." @bind="searchKeyword" @onkeypress="@(async (e) => { if (e.Key == "Enter") await SearchTickets(); })">
+                    <button class="btn btn-outline-secondary" type="button" @onclick="SearchTickets">
+                        <span class="bi bi-search" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            @if (tickets?.Any() == true)
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Status</th>
+                                <th>Priority</th>
+                                <th>Assignee</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ticket in tickets)
+                            {
+                                <tr>
+                                    <td>
+                                        <a href="/tickets/@ticket.Id" class="text-decoration-none">
+                                            @ticket.Title
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@GetStatusColor(ticket.Status)">@ticket.Status</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@GetPriorityColor(ticket.Priority)">@ticket.Priority</span>
+                                    </td>
+                                    <td>
+                                        @if (ticket.Assignments?.Any() == true)
+                                        {
+                                            <span class="text-muted">@ticket.Assignments.Count assigned</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">Unassigned</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">@ticket.CreatedAt.ToString("MMM dd")</small>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="/tickets/@ticket.Id" class="btn btn-outline-primary btn-sm">
+                                                <span class="bi bi-eye" aria-hidden="true"></span>
+                                            </a>
+                                            <button class="btn btn-outline-warning btn-sm" @onclick="() => ShowEditTicketModal(ticket)">
+                                                <span class="bi bi-pencil" aria-hidden="true"></span>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-4">
+                    <span class="bi bi-clipboard-x fs-1 text-muted d-block mb-2" aria-hidden="true"></span>
+                    <p class="text-muted">No tickets found for this project</p>
+                    <button class="btn btn-primary" @onclick="ShowCreateTicketModal">
+                        <span class="bi bi-plus-circle" aria-hidden="true"></span> Create First Ticket
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <span class="bi bi-exclamation-triangle fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+        <h3>Project not found</h3>
+        <p class="text-muted mb-4">The project you're looking for doesn't exist or you don't have access to it.</p>
+        <a href="/projects" class="btn btn-primary">
+            <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Projects
+        </a>
+    </div>
+}
+
+<!-- Create Ticket Modal -->
+<div class="modal fade @(showCreateTicketModal ? "show" : "")" style="display: @(showCreateTicketModal ? "block" : "none")" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create New Ticket</h5>
+                <button type="button" class="btn-close" @onclick="HideCreateTicketModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="ticketForm" OnValidSubmit="CreateTicket">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="text-danger" />
+
+                    <div class="mb-3">
+                        <label for="ticketTitle" class="form-label">Title</label>
+                        <InputText id="ticketTitle" class="form-control" @bind-Value="ticketForm.Title" placeholder="Enter ticket title" />
+                        <ValidationMessage For="@(() => ticketForm.Title)" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="ticketDescription" class="form-label">Description</label>
+                        <InputTextArea id="ticketDescription" class="form-control" rows="3" @bind-Value="ticketForm.Description" placeholder="Enter ticket description" />
+                        <ValidationMessage For="@(() => ticketForm.Description)" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="ticketPriority" class="form-label">Priority</label>
+                        <InputSelect id="ticketPriority" class="form-select" @bind-Value="ticketForm.Priority">
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Critical">Critical</option>
+                        </InputSelect>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="HideCreateTicketModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isCreatingTicket">
+                            @if (isCreatingTicket)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            Create Ticket
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (showCreateTicketModal)
+{
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private ProjectDto? project;
+    private List<TicketDto>? tickets;
+    private bool isLoading = true;
+    private bool showCreateTicketModal = false;
+    private bool isCreatingTicket = false;
+    private string searchKeyword = string.Empty;
+    private CreateTicketFormModel ticketForm = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProject();
+        await LoadTickets();
+    }
+
+    private async Task LoadProject()
+    {
+        try
+        {
+            var response = await ApiClient.GetProjectAsync(ProjectId);
+            if (response?.Success == true && response.Data != null)
+            {
+                project = response.Data;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading project: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTickets()
+    {
+        try
+        {
+            var response = await ApiClient.GetProjectTicketsAsync(ProjectId);
+            if (response?.Success == true && response.Data != null)
+            {
+                tickets = response.Data.OrderByDescending(t => t.CreatedAt).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading tickets: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SearchTickets()
+    {
+        if (string.IsNullOrWhiteSpace(searchKeyword))
+        {
+            await LoadTickets();
+            return;
+        }
+
+        try
+        {
+            var response = await ApiClient.SearchTicketsAsync(ProjectId, searchKeyword);
+            if (response?.Success == true && response.Data?.Items != null)
+            {
+                tickets = response.Data.Items.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching tickets: {ex.Message}");
+        }
+    }
+
+    private void ShowCreateTicketModal()
+    {
+        ticketForm = new CreateTicketFormModel();
+        showCreateTicketModal = true;
+    }
+
+    private void HideCreateTicketModal()
+    {
+        showCreateTicketModal = false;
+        ticketForm = new CreateTicketFormModel();
+    }
+
+    private void ShowEditTicketModal(TicketDto ticket)
+    {
+        Navigation.NavigateTo($"/tickets/{ticket.Id}");
+    }
+
+    private async Task CreateTicket()
+    {
+        isCreatingTicket = true;
+        try
+        {
+            var createDto = new CreateTicketDto
+            {
+                Title = ticketForm.Title,
+                Description = ticketForm.Description,
+                Priority = Enum.Parse<TicketManagement.Core.Enums.TicketPriority>(ticketForm.Priority)
+            };
+
+            var response = await ApiClient.CreateTicketAsync(ProjectId, createDto);
+            if (response?.Success == true)
+            {
+                HideCreateTicketModal();
+                await LoadTickets();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating ticket: {ex.Message}");
+        }
+        finally
+        {
+            isCreatingTicket = false;
+        }
+    }
+
+    private string GetStatusColor(TicketManagement.Core.Enums.TicketStatus status)
+    {
+        return status switch
+        {
+            TicketManagement.Core.Enums.TicketStatus.Open => "primary",
+            TicketManagement.Core.Enums.TicketStatus.InProgress => "warning",
+            TicketManagement.Core.Enums.TicketStatus.Review => "info",
+            TicketManagement.Core.Enums.TicketStatus.Closed => "success",
+            TicketManagement.Core.Enums.TicketStatus.OnHold => "secondary",
+            _ => "dark"
+        };
+    }
+
+    private string GetPriorityColor(TicketManagement.Core.Enums.TicketPriority priority)
+    {
+        return priority switch
+        {
+            TicketManagement.Core.Enums.TicketPriority.Low => "secondary",
+            TicketManagement.Core.Enums.TicketPriority.Medium => "primary",
+            TicketManagement.Core.Enums.TicketPriority.High => "warning",
+            TicketManagement.Core.Enums.TicketPriority.Critical => "danger",
+            _ => "dark"
+        };
+    }
+
+    private class CreateTicketFormModel
+    {
+        [Required]
+        [StringLength(200, MinimumLength = 1)]
+        public string Title { get; set; } = string.Empty;
+
+        [StringLength(2000)]
+        public string Description { get; set; } = string.Empty;
+
+        public string Priority { get; set; } = "Medium";
+    }
+}

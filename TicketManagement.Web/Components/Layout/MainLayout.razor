@@ -1,0 +1,180 @@
+﻿@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using Microsoft.AspNetCore.Components.Authorization
+@inherits LayoutComponentBase
+@inject NotificationHubService NotificationHub
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="notification-indicator">
+                            <span class="bi bi-bell-fill text-primary"></span>
+                            @if (unreadCount > 0)
+                            {
+                                <span class="badge bg-danger position-absolute top-0 start-100 translate-middle rounded-pill">@unreadCount</span>
+                            }
+                        </div>
+                        <span class="text-muted">Welcome, @context.User.Identity?.Name</span>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="/login" class="btn btn-primary btn-sm">Login</a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<!-- Toast Notifications -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1050;">
+    @if (showToast && latestNotification != null)
+    {
+        <div class="toast show" role="alert">
+            <div class="toast-header">
+                <span class="bi bi-@GetNotificationIcon(latestNotification.Type) text-@GetNotificationColor(latestNotification.Type) me-2"></span>
+                <strong class="me-auto">@GetNotificationTitle(latestNotification.Type)</strong>
+                <small class="text-muted">Just now</small>
+                <button type="button" class="btn-close" @onclick="HideToast"></button>
+            </div>
+            <div class="toast-body">
+                @latestNotification.Message
+            </div>
+        </div>
+    }
+</div>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+@code {
+    private int unreadCount = 0;
+    private bool showToast = false;
+    private NotificationDto? latestNotification;
+    private Timer? toastTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to notification events
+        NotificationHub.NotificationReceived += OnNotificationReceived;
+        NotificationHub.UnreadCountUpdated += OnUnreadCountUpdated;
+
+        // Check if user is authenticated and start SignalR connection
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            await StartSignalRConnection();
+        }
+    }
+
+    private async Task StartSignalRConnection()
+    {
+        try
+        {
+            var apiBaseUrl = "https+http://apiservice"; // This should come from configuration
+            await NotificationHub.StartAsync(apiBaseUrl);
+            
+            // Get initial unread count
+            unreadCount = await NotificationHub.GetUnreadCountAsync();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting SignalR connection: {ex.Message}");
+        }
+    }
+
+    private void OnNotificationReceived(NotificationDto notification)
+    {
+        latestNotification = notification;
+        showToast = true;
+        
+        // Auto-hide toast after 5 seconds
+        toastTimer?.Dispose();
+        toastTimer = new Timer((_) => InvokeAsync(() =>
+        {
+            showToast = false;
+            StateHasChanged();
+        }), null, 5000, Timeout.Infinite);
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnUnreadCountUpdated(int count)
+    {
+        unreadCount = count;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HideToast()
+    {
+        showToast = false;
+        toastTimer?.Dispose();
+    }
+
+    private string GetNotificationIcon(TicketManagement.Core.Enums.NotificationType type)
+    {
+        return type switch
+        {
+            TicketManagement.Core.Enums.NotificationType.TicketAssigned => "person-check",
+            TicketManagement.Core.Enums.NotificationType.CommentAdded => "chat-left-text",
+            TicketManagement.Core.Enums.NotificationType.StatusChanged => "arrow-repeat",
+            TicketManagement.Core.Enums.NotificationType.MentionedInComment => "at",
+            _ => "bell"
+        };
+    }
+
+    private string GetNotificationColor(TicketManagement.Core.Enums.NotificationType type)
+    {
+        return type switch
+        {
+            TicketManagement.Core.Enums.NotificationType.TicketAssigned => "info",
+            TicketManagement.Core.Enums.NotificationType.CommentAdded => "warning",
+            TicketManagement.Core.Enums.NotificationType.StatusChanged => "primary",
+            TicketManagement.Core.Enums.NotificationType.MentionedInComment => "danger",
+            _ => "secondary"
+        };
+    }
+
+    private string GetNotificationTitle(TicketManagement.Core.Enums.NotificationType type)
+    {
+        return type switch
+        {
+            TicketManagement.Core.Enums.NotificationType.TicketAssigned => "Ticket Assigned",
+            TicketManagement.Core.Enums.NotificationType.CommentAdded => "New Comment",
+            TicketManagement.Core.Enums.NotificationType.StatusChanged => "Status Changed",
+            TicketManagement.Core.Enums.NotificationType.MentionedInComment => "You Were Mentioned",
+            _ => "Notification"
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Unsubscribe from events
+        NotificationHub.NotificationReceived -= OnNotificationReceived;
+        NotificationHub.UnreadCountUpdated -= OnUnreadCountUpdated;
+        
+        toastTimer?.Dispose();
+        
+        if (NotificationHub != null)
+        {
+            await NotificationHub.DisposeAsync();
+        }
+    }
+}

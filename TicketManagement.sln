@@ -1,0 +1,83 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.0.0
+MinimumVisualStudioVersion = 17.8.0.0
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TicketManagement.AppHost", "TicketManagement.AppHost\TicketManagement.AppHost.csproj", "{14DBB493-39A4-43CA-8E66-5D7D039E1438}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TicketManagement.ServiceDefaults", "TicketManagement.ServiceDefaults\TicketManagement.ServiceDefaults.csproj", "{C3686FAE-E43F-4CED-90F9-02D6B7BDC33E}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TicketManagement.ApiService", "TicketManagement.ApiService\TicketManagement.ApiService.csproj", "{D1F32CEE-1609-4782-BF52-8D9F30B1533F}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TicketManagement.Web", "TicketManagement.Web\TicketManagement.Web.csproj", "{997E4F18-74D6-4653-AEE0-D6E08D9CC8F2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{C42718CB-8BA8-4523-93FE-B64456EE9FB5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TicketManagement.Core", "src\TicketManagement.Core\TicketManagement.Core.csproj", "{D318EBED-884E-493F-A97A-41E09EF74037}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TicketManagement.Infrastructure", "src\TicketManagement.Infrastructure\TicketManagement.Infrastructure.csproj", "{CD35FD7C-A837-4656-815A-3AF97A007EED}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TicketManagement.Contracts", "src\TicketManagement.Contracts\TicketManagement.Contracts.csproj", "{95B5C9CC-CB4E-4265-841C-5923B9E89B02}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{568FECD8-8FD5-406B-9F08-89C83A2B5843}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TicketManagement.Tests", "tests\TicketManagement.Tests\TicketManagement.Tests.csproj", "{53B39DC6-2B4D-4859-B636-FF42CB48ABA0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TicketManagement.IntegrationTests", "tests\TicketManagement.IntegrationTests\TicketManagement.IntegrationTests.csproj", "{CA77D60D-7239-434E-8FAB-64FD10C5CB23}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{14DBB493-39A4-43CA-8E66-5D7D039E1438}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14DBB493-39A4-43CA-8E66-5D7D039E1438}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14DBB493-39A4-43CA-8E66-5D7D039E1438}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14DBB493-39A4-43CA-8E66-5D7D039E1438}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3686FAE-E43F-4CED-90F9-02D6B7BDC33E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3686FAE-E43F-4CED-90F9-02D6B7BDC33E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3686FAE-E43F-4CED-90F9-02D6B7BDC33E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3686FAE-E43F-4CED-90F9-02D6B7BDC33E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1F32CEE-1609-4782-BF52-8D9F30B1533F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1F32CEE-1609-4782-BF52-8D9F30B1533F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1F32CEE-1609-4782-BF52-8D9F30B1533F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1F32CEE-1609-4782-BF52-8D9F30B1533F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{997E4F18-74D6-4653-AEE0-D6E08D9CC8F2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{997E4F18-74D6-4653-AEE0-D6E08D9CC8F2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{997E4F18-74D6-4653-AEE0-D6E08D9CC8F2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{997E4F18-74D6-4653-AEE0-D6E08D9CC8F2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D318EBED-884E-493F-A97A-41E09EF74037}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D318EBED-884E-493F-A97A-41E09EF74037}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D318EBED-884E-493F-A97A-41E09EF74037}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D318EBED-884E-493F-A97A-41E09EF74037}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CD35FD7C-A837-4656-815A-3AF97A007EED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD35FD7C-A837-4656-815A-3AF97A007EED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD35FD7C-A837-4656-815A-3AF97A007EED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD35FD7C-A837-4656-815A-3AF97A007EED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{95B5C9CC-CB4E-4265-841C-5923B9E89B02}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{95B5C9CC-CB4E-4265-841C-5923B9E89B02}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{95B5C9CC-CB4E-4265-841C-5923B9E89B02}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{95B5C9CC-CB4E-4265-841C-5923B9E89B02}.Release|Any CPU.Build.0 = Release|Any CPU
+		{53B39DC6-2B4D-4859-B636-FF42CB48ABA0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{53B39DC6-2B4D-4859-B636-FF42CB48ABA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{53B39DC6-2B4D-4859-B636-FF42CB48ABA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{53B39DC6-2B4D-4859-B636-FF42CB48ABA0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CA77D60D-7239-434E-8FAB-64FD10C5CB23}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CA77D60D-7239-434E-8FAB-64FD10C5CB23}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CA77D60D-7239-434E-8FAB-64FD10C5CB23}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CA77D60D-7239-434E-8FAB-64FD10C5CB23}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {CA319505-75E3-4469-B22C-4CD38A251642}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D318EBED-884E-493F-A97A-41E09EF74037} = {C42718CB-8BA8-4523-93FE-B64456EE9FB5}
+		{CD35FD7C-A837-4656-815A-3AF97A007EED} = {C42718CB-8BA8-4523-93FE-B64456EE9FB5}
+		{95B5C9CC-CB4E-4265-841C-5923B9E89B02} = {C42718CB-8BA8-4523-93FE-B64456EE9FB5}
+		{53B39DC6-2B4D-4859-B636-FF42CB48ABA0} = {568FECD8-8FD5-406B-9F08-89C83A2B5843}
+		{CA77D60D-7239-434E-8FAB-64FD10C5CB23} = {568FECD8-8FD5-406B-9F08-89C83A2B5843}
+	EndGlobalSection
+EndGlobal

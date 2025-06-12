@@ -1,0 +1,463 @@
+@page "/projects/{ProjectId:guid}/members"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using TicketManagement.Core.Enums
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<PageTitle>@(project?.Name ?? "Project") Members - Ticket Management</PageTitle>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading project members...</p>
+    </div>
+}
+else if (project != null)
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/projects">Projects</a></li>
+                    <li class="breadcrumb-item"><a href="/projects/@ProjectId">@project.Name</a></li>
+                    <li class="breadcrumb-item active">Members</li>
+                </ol>
+            </nav>
+            <h1><span class="bi bi-people-fill" aria-hidden="true"></span> Project Members</h1>
+        </div>
+        <button class="btn btn-primary" @onclick="ShowAddMemberModal">
+            <span class="bi bi-person-plus" aria-hidden="true"></span> Add Member
+        </button>
+    </div>
+
+    <!-- Project Info Card -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">@project.Name</h5>
+            <p class="card-text text-muted">@project.Description</p>
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">@members?.Count members</small>
+                <span class="badge bg-@(project.IsActive ? "success" : "secondary")">
+                    @(project.IsActive ? "Active" : "Inactive")
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Members List -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Team Members</h5>
+        </div>
+        <div class="card-body">
+            @if (members?.Any() == true)
+            {
+                <div class="row">
+                    @foreach (var member in members.OrderBy(m => m.Role).ThenBy(m => m.UserId))
+                    {
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center mb-3">
+                                        <div class="avatar-circle me-3">
+                                            <span class="bi bi-person-circle fs-1 text-muted"></span>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <h6 class="card-title mb-1">@member.UserId</h6>
+                                            <span class="badge bg-@GetRoleColor(member.Role)">@GetRoleDisplayName(member.Role)</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-muted small">
+                                        <div class="mb-1">
+                                            <span class="bi bi-calendar-plus me-1"></span>
+                                            Joined @member.JoinedAt.ToString("MMM dd, yyyy")
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-footer bg-transparent">
+                                    <div class="btn-group w-100">
+                                        <button class="btn btn-outline-warning btn-sm" @onclick="() => ShowEditMemberModal(member)">
+                                            <span class="bi bi-pencil" aria-hidden="true"></span> Edit Role
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => ShowRemoveMemberModal(member)">
+                                            <span class="bi bi-person-dash" aria-hidden="true"></span> Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-center py-4">
+                    <span class="bi bi-people fs-1 text-muted d-block mb-2" aria-hidden="true"></span>
+                    <p class="text-muted">No members found for this project</p>
+                    <button class="btn btn-primary" @onclick="ShowAddMemberModal">
+                        <span class="bi bi-person-plus" aria-hidden="true"></span> Add First Member
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <span class="bi bi-exclamation-triangle fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+        <h3>Project not found</h3>
+        <p class="text-muted mb-4">The project you're looking for doesn't exist or you don't have access to it.</p>
+        <a href="/projects" class="btn btn-primary">
+            <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Projects
+        </a>
+    </div>
+}
+
+<!-- Add Member Modal -->
+<div class="modal fade @(showAddMemberModal ? "show" : "")" style="display: @(showAddMemberModal ? "block" : "none")" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Project Member</h5>
+                <button type="button" class="btn-close" @onclick="HideAddMemberModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="memberForm" OnValidSubmit="AddMember">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="text-danger" />
+
+                    <div class="mb-3">
+                        <label for="userId" class="form-label">User ID</label>
+                        <InputText id="userId" class="form-control" @bind-Value="memberForm.UserId" placeholder="Enter user ID" />
+                        <ValidationMessage For="@(() => memberForm.UserId)" />
+                        <div class="form-text">Enter the Keycloak user ID or email</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="role" class="form-label">Role</label>
+                        <InputSelect id="role" class="form-select" @bind-Value="memberForm.Role">
+                            <option value="Viewer">Viewer</option>
+                            <option value="Member">Member</option>
+                            <option value="Admin">Admin</option>
+                        </InputSelect>
+                        <ValidationMessage For="@(() => memberForm.Role)" />
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="HideAddMemberModal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" disabled="@isAddingMember">
+                            @if (isAddingMember)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            Add Member
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Member Modal -->
+<div class="modal fade @(showEditMemberModal ? "show" : "")" style="display: @(showEditMemberModal ? "block" : "none")" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Member Role</h5>
+                <button type="button" class="btn-close" @onclick="HideEditMemberModal"></button>
+            </div>
+            <div class="modal-body">
+                @if (selectedMember != null)
+                {
+                    <EditForm Model="editMemberForm" OnValidSubmit="UpdateMemberRole">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label class="form-label">User</label>
+                            <div class="form-control-plaintext">@selectedMember.UserId</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="editRole" class="form-label">Role</label>
+                            <InputSelect id="editRole" class="form-select" @bind-Value="editMemberForm.Role">
+                                <option value="Viewer">Viewer</option>
+                                <option value="Member">Member</option>
+                                <option value="Admin">Admin</option>
+                            </InputSelect>
+                            <ValidationMessage For="@(() => editMemberForm.Role)" />
+                        </div>
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="HideEditMemberModal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@isUpdatingMember">
+                                @if (isUpdatingMember)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                Update Role
+                            </button>
+                        </div>
+                    </EditForm>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Remove Member Modal -->
+<div class="modal fade @(showRemoveMemberModal ? "show" : "")" style="display: @(showRemoveMemberModal ? "block" : "none")" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Remove Member</h5>
+                <button type="button" class="btn-close" @onclick="HideRemoveMemberModal"></button>
+            </div>
+            <div class="modal-body">
+                @if (selectedMember != null)
+                {
+                    <p>Are you sure you want to remove <strong>@selectedMember.UserId</strong> from this project?</p>
+                    <div class="alert alert-warning">
+                        <span class="bi bi-exclamation-triangle me-2"></span>
+                        This action cannot be undone. The user will lose access to this project.
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="HideRemoveMemberModal">Cancel</button>
+                <button type="button" class="btn btn-danger" @onclick="RemoveMember" disabled="@isRemovingMember">
+                    @if (isRemovingMember)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    }
+                    Remove Member
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (showAddMemberModal || showEditMemberModal || showRemoveMemberModal)
+{
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private ProjectDto? project;
+    private List<ProjectMemberDto>? members;
+    private bool isLoading = true;
+    private bool showAddMemberModal = false;
+    private bool showEditMemberModal = false;
+    private bool showRemoveMemberModal = false;
+    private bool isAddingMember = false;
+    private bool isUpdatingMember = false;
+    private bool isRemovingMember = false;
+    private AddMemberFormModel memberForm = new();
+    private EditMemberFormModel editMemberForm = new();
+    private ProjectMemberDto? selectedMember;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProject();
+        await LoadMembers();
+    }
+
+    private async Task LoadProject()
+    {
+        try
+        {
+            var response = await ApiClient.GetProjectAsync(ProjectId);
+            if (response?.Success == true && response.Data != null)
+            {
+                project = response.Data;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading project: {ex.Message}");
+        }
+    }
+
+    private async Task LoadMembers()
+    {
+        try
+        {
+            var response = await ApiClient.GetProjectMembersAsync(ProjectId);
+            if (response?.Success == true && response.Data != null)
+            {
+                members = response.Data.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading members: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ShowAddMemberModal()
+    {
+        memberForm = new AddMemberFormModel();
+        showAddMemberModal = true;
+    }
+
+    private void HideAddMemberModal()
+    {
+        showAddMemberModal = false;
+        memberForm = new AddMemberFormModel();
+    }
+
+    private void ShowEditMemberModal(ProjectMemberDto member)
+    {
+        selectedMember = member;
+        editMemberForm = new EditMemberFormModel
+        {
+            Role = member.Role.ToString()
+        };
+        showEditMemberModal = true;
+    }
+
+    private void HideEditMemberModal()
+    {
+        showEditMemberModal = false;
+        selectedMember = null;
+        editMemberForm = new EditMemberFormModel();
+    }
+
+    private void ShowRemoveMemberModal(ProjectMemberDto member)
+    {
+        selectedMember = member;
+        showRemoveMemberModal = true;
+    }
+
+    private void HideRemoveMemberModal()
+    {
+        showRemoveMemberModal = false;
+        selectedMember = null;
+    }
+
+    private async Task AddMember()
+    {
+        isAddingMember = true;
+        try
+        {
+            var addMemberDto = new AddProjectMemberDto
+            {
+                UserId = memberForm.UserId,
+                Role = Enum.Parse<ProjectRole>(memberForm.Role)
+            };
+            var response = await ApiClient.AddProjectMemberAsync(ProjectId, addMemberDto);
+            if (response?.Success == true)
+            {
+                HideAddMemberModal();
+                await LoadMembers();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error adding member: {ex.Message}");
+        }
+        finally
+        {
+            isAddingMember = false;
+        }
+    }
+
+    private async Task UpdateMemberRole()
+    {
+        if (selectedMember == null) return;
+
+        isUpdatingMember = true;
+        try
+        {
+            // TODO: Implement UpdateProjectMemberRoleAsync in API client
+            Console.WriteLine($"TODO: Update member role for {selectedMember.UserId} to {editMemberForm.Role}");
+            await Task.Delay(1000); // Simulate API call
+            
+            HideEditMemberModal();
+            // await LoadMembers(); // Uncomment when API is available
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating member role: {ex.Message}");
+        }
+        finally
+        {
+            isUpdatingMember = false;
+        }
+    }
+
+    private async Task RemoveMember()
+    {
+        if (selectedMember == null) return;
+
+        isRemovingMember = true;
+        try
+        {
+            // TODO: Implement RemoveProjectMemberAsync in API client
+            Console.WriteLine($"TODO: Remove member {selectedMember.UserId} from project");
+            await Task.Delay(1000); // Simulate API call
+            
+            HideRemoveMemberModal();
+            // await LoadMembers(); // Uncomment when API is available
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error removing member: {ex.Message}");
+        }
+        finally
+        {
+            isRemovingMember = false;
+        }
+    }
+
+    private string GetRoleColor(ProjectRole role)
+    {
+        return role switch
+        {
+            ProjectRole.Admin => "danger",
+            ProjectRole.Member => "primary",
+            ProjectRole.Viewer => "secondary",
+            _ => "dark"
+        };
+    }
+
+    private string GetRoleDisplayName(ProjectRole role)
+    {
+        return role switch
+        {
+            ProjectRole.Admin => "Admin",
+            ProjectRole.Member => "Member",
+            ProjectRole.Viewer => "Viewer",
+            _ => role.ToString()
+        };
+    }
+
+    private class AddMemberFormModel
+    {
+        [Required]
+        [StringLength(100, MinimumLength = 1)]
+        public string UserId { get; set; } = string.Empty;
+
+        [Required]
+        public string Role { get; set; } = "Member";
+    }
+
+    private class EditMemberFormModel
+    {
+        [Required]
+        public string Role { get; set; } = "Member";
+    }
+}

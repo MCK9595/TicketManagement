@@ -1,0 +1,89 @@
+@using TicketManagement.Contracts.DTOs
+
+<div class="d-flex justify-content-between align-items-center mt-3">
+    <div>
+        <span class="text-muted">
+            Showing @Math.Min(((CurrentPage - 1) * PageSize) + 1, TotalItems) 
+            to @Math.Min(CurrentPage * PageSize, TotalItems) 
+            of @TotalItems items
+        </span>
+    </div>
+    
+    <nav aria-label="Pagination">
+        <ul class="pagination mb-0">
+            <!-- Previous button -->
+            <li class="page-item @(CurrentPage == 1 ? "disabled" : "")">
+                <button class="page-link" @onclick="() => OnPageChanged(CurrentPage - 1)" disabled="@(CurrentPage == 1)">
+                    <span class="bi bi-chevron-left"></span>
+                    Previous
+                </button>
+            </li>
+
+            <!-- First page -->
+            @if (CurrentPage > 3)
+            {
+                <li class="page-item">
+                    <button class="page-link" @onclick="() => OnPageChanged(1)">1</button>
+                </li>
+                @if (CurrentPage > 4)
+                {
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                }
+            }
+
+            <!-- Page numbers around current page -->
+            @{
+                var startPage = Math.Max(1, CurrentPage - 2);
+                var endPage = Math.Min(TotalPages, CurrentPage + 2);
+            }
+            @for (var i = startPage; i <= endPage; i++)
+            {
+                var pageNumber = i; // Capture loop variable
+                <li class="page-item @(pageNumber == CurrentPage ? "active" : "")">
+                    <button class="page-link" @onclick="() => OnPageChanged(pageNumber)">@pageNumber</button>
+                </li>
+            }
+
+            <!-- Last page -->
+            @if (CurrentPage < TotalPages - 2)
+            {
+                @if (CurrentPage < TotalPages - 3)
+                {
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                }
+                <li class="page-item">
+                    <button class="page-link" @onclick="() => OnPageChanged(TotalPages)">@TotalPages</button>
+                </li>
+            }
+
+            <!-- Next button -->
+            <li class="page-item @(CurrentPage == TotalPages ? "disabled" : "")">
+                <button class="page-link" @onclick="() => OnPageChanged(CurrentPage + 1)" disabled="@(CurrentPage == TotalPages)">
+                    Next
+                    <span class="bi bi-chevron-right"></span>
+                </button>
+            </li>
+        </ul>
+    </nav>
+</div>
+
+@code {
+    [Parameter] public int CurrentPage { get; set; } = 1;
+    [Parameter] public int PageSize { get; set; } = 10;
+    [Parameter] public int TotalItems { get; set; }
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+
+    private int TotalPages => (int)Math.Ceiling((double)TotalItems / PageSize);
+
+    private async Task OnPageChanged(int page)
+    {
+        if (page >= 1 && page <= TotalPages && page != CurrentPage)
+        {
+            await PageChanged.InvokeAsync(page);
+        }
+    }
+}

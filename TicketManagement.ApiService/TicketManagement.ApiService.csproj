@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TicketManagement.ServiceDefaults\TicketManagement.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\src\TicketManagement.Infrastructure\TicketManagement.Infrastructure.csproj" />
+    <ProjectReference Include="..\src\TicketManagement.Core\TicketManagement.Core.csproj" />
+    <ProjectReference Include="..\src\TicketManagement.Contracts\TicketManagement.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Keycloak.Authentication" Version="9.3.1-preview.1.25305.6" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="9.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authorization" Version="9.0.2" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.3.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.3.0" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.3.0" />
+    <PackageReference Include="Keycloak.AuthServices.Authentication" Version="2.5.2" />
+    <PackageReference Include="Keycloak.AuthServices.Authorization" Version="2.5.2" />
+  </ItemGroup>
+
+</Project>

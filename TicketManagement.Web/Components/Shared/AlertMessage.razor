@@ -1,0 +1,50 @@
+@if (!string.IsNullOrEmpty(Message))
+{
+    <div class="alert alert-@AlertTypeString.ToLower() alert-dismissible fade show" role="alert">
+        <span class="bi bi-@GetAlertIcon() me-2"></span>
+        @Message
+        @if (Dismissible)
+        {
+            <button type="button" class="btn-close" @onclick="OnDismiss"></button>
+        }
+    </div>
+}
+
+@code {
+    public enum AlertType
+    {
+        Primary,
+        Secondary,
+        Success,
+        Danger,
+        Warning,
+        Info,
+        Light,
+        Dark
+    }
+
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public AlertType Type { get; set; } = AlertType.Info;
+    [Parameter] public bool Dismissible { get; set; } = true;
+    [Parameter] public EventCallback OnDismissed { get; set; }
+
+    private string AlertTypeString => Type.ToString();
+
+    private async Task OnDismiss()
+    {
+        Message = null;
+        await OnDismissed.InvokeAsync();
+    }
+
+    private string GetAlertIcon()
+    {
+        return Type switch
+        {
+            AlertType.Success => "check-circle",
+            AlertType.Danger => "exclamation-triangle",
+            AlertType.Warning => "exclamation-triangle",
+            AlertType.Info => "info-circle",
+            _ => "info-circle"
+        };
+    }
+}

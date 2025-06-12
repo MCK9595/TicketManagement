@@ -1,0 +1,33 @@
+﻿<CascadingAuthenticationState>
+    <Router AppAssembly="typeof(Program).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                <NotAuthorized>
+                    <PageTitle>Access Denied</PageTitle>
+                    <LayoutView Layout="typeof(Layout.MainLayout)">
+                        <div class="text-center py-5">
+                            <span class="bi bi-shield-lock fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+                            <h3>Access Denied</h3>
+                            <p class="text-muted mb-4">You need to log in to access this page.</p>
+                            <a href="/login" class="btn btn-primary">
+                                <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login
+                            </a>
+                        </div>
+                    </LayoutView>
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <PageTitle>Not found</PageTitle>
+            <LayoutView Layout="typeof(Layout.MainLayout)">
+                <div class="text-center py-5">
+                    <span class="bi bi-exclamation-triangle fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+                    <h3>Page not found</h3>
+                    <p class="text-muted mb-4">Sorry, there's nothing at this address.</p>
+                    <a href="/" class="btn btn-primary">Go to Dashboard</a>
+                </div>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

@@ -1,0 +1,536 @@
+@page "/reports"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using TicketManagement.Core.Enums
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<PageTitle>Reports - Ticket Management</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><span class="bi bi-graph-up" aria-hidden="true"></span> Reports & Analytics</h1>
+    <div class="d-flex gap-2">
+        <select class="form-select" style="width: 200px;" @onchange="OnProjectFilterChanged">
+            <option value="">All Projects</option>
+            @if (projects != null)
+            {
+                @foreach (var project in projects)
+                {
+                    <option value="@project.Id">@project.Name</option>
+                }
+            }
+        </select>
+        <button class="btn btn-outline-primary" @onclick="RefreshData">
+            <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Refresh
+        </button>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading reports...</p>
+    </div>
+}
+else
+{
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-center mb-2">
+                        <span class="bi bi-folder-fill text-primary fs-1 me-2"></span>
+                        <h2 class="card-title text-primary mb-0">@(projects?.Count ?? 0)</h2>
+                    </div>
+                    <p class="card-text text-muted">Total Projects</p>
+                    <small class="text-success">@(projects?.Count(p => p.IsActive) ?? 0) Active</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-center mb-2">
+                        <span class="bi bi-clipboard-data text-warning fs-1 me-2"></span>
+                        <h2 class="card-title text-warning mb-0">@totalTickets</h2>
+                    </div>
+                    <p class="card-text text-muted">Total Tickets</p>
+                    <small class="text-info">@openTickets Open</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-center mb-2">
+                        <span class="bi bi-check-circle text-success fs-1 me-2"></span>
+                        <h2 class="card-title text-success mb-0">@closedTickets</h2>
+                    </div>
+                    <p class="card-text text-muted">Completed</p>
+                    <small class="text-muted">@GetCompletionRate()% Rate</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-center mb-2">
+                        <span class="bi bi-exclamation-triangle text-danger fs-1 me-2"></span>
+                        <h2 class="card-title text-danger mb-0">@criticalTickets</h2>
+                    </div>
+                    <p class="card-text text-muted">Critical Priority</p>
+                    <small class="text-warning">Needs Attention</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <!-- Ticket Status Distribution -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Ticket Status Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        @foreach (var status in Enum.GetValues<TicketStatus>())
+                        {
+                            var count = allTickets?.Count(t => t.Status == status) ?? 0;
+                            var percentage = totalTickets > 0 ? (count * 100.0 / totalTickets) : 0;
+                            
+                            <div class="col-12 mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-muted">@GetStatusDisplayName(status)</span>
+                                    <span class="fw-bold">@count (@percentage.ToString("F1")%)</span>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-@GetStatusColor(status)" 
+                                         style="width: @percentage.ToString("F1")%"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Priority Distribution -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Priority Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        @foreach (var priority in Enum.GetValues<TicketPriority>())
+                        {
+                            var count = allTickets?.Count(t => t.Priority == priority) ?? 0;
+                            var percentage = totalTickets > 0 ? (count * 100.0 / totalTickets) : 0;
+                            
+                            <div class="col-12 mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-muted">@GetPriorityDisplayName(priority)</span>
+                                    <span class="fw-bold">@count (@percentage.ToString("F1")%)</span>
+                                </div>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-@GetPriorityColor(priority)" 
+                                         style="width: @percentage.ToString("F1")%"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity and Top Projects -->
+    <div class="row mb-4">
+        <!-- Recent Activity -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Recent Activity</h5>
+                </div>
+                <div class="card-body">
+                    @if (recentTickets?.Any() == true)
+                    {
+                        <div class="timeline">
+                            @foreach (var ticket in recentTickets.Take(10))
+                            {
+                                <div class="timeline-item d-flex mb-3">
+                                    <div class="flex-shrink-0">
+                                        <span class="badge bg-@GetStatusColor(ticket.Status) rounded-circle p-2">
+                                            <span class="bi bi-@GetStatusIcon(ticket.Status)"></span>
+                                        </span>
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <div class="d-flex justify-content-between">
+                                            <a href="/tickets/@ticket.Id" class="text-decoration-none fw-bold">
+                                                @ticket.Title
+                                            </a>
+                                            <small class="text-muted">@GetRelativeTime(ticket.UpdatedAt ?? ticket.CreatedAt)</small>
+                                        </div>
+                                        <small class="text-muted d-block">
+                                            @ticket.ProjectName • @ticket.Status
+                                        </small>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-4">
+                            <span class="bi bi-clock-history fs-2 d-block mb-2"></span>
+                            <p>No recent activity</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Project Performance -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Project Performance</h5>
+                </div>
+                <div class="card-body">
+                    @if (projectStats?.Any() == true)
+                    {
+                        @foreach (var stat in projectStats.Take(10))
+                        {
+                            var completionRate = stat.TotalTickets > 0 ? (stat.CompletedTickets * 100.0 / stat.TotalTickets) : 0;
+                            
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <a href="/projects/@stat.ProjectId" class="text-decoration-none fw-bold">
+                                        @stat.ProjectName
+                                    </a>
+                                    <span class="text-muted">@stat.TotalTickets tickets</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small class="text-muted">Completion: @completionRate.ToString("F1")%</small>
+                                    <small class="text-muted">@stat.CompletedTickets/@stat.TotalTickets done</small>
+                                </div>
+                                <div class="progress" style="height: 6px;">
+                                    <div class="progress-bar bg-success" style="width: @completionRate.ToString("F1")%"></div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-4">
+                            <span class="bi bi-bar-chart fs-2 d-block mb-2"></span>
+                            <p>No project data available</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Statistics Tables -->
+    <div class="row">
+        <!-- Tickets by Project -->
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Detailed Statistics</h5>
+                </div>
+                <div class="card-body">
+                    @if (projectStats?.Any() == true)
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Project</th>
+                                        <th>Total Tickets</th>
+                                        <th>Open</th>
+                                        <th>In Progress</th>
+                                        <th>Review</th>
+                                        <th>Closed</th>
+                                        <th>On Hold</th>
+                                        <th>Completion Rate</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var stat in projectStats)
+                                    {
+                                        var completionRate = stat.TotalTickets > 0 ? (stat.CompletedTickets * 100.0 / stat.TotalTickets) : 0;
+                                        
+                                        <tr>
+                                            <td>
+                                                <a href="/projects/@stat.ProjectId" class="text-decoration-none">
+                                                    @stat.ProjectName
+                                                </a>
+                                            </td>
+                                            <td>@stat.TotalTickets</td>
+                                            <td><span class="badge bg-primary">@stat.OpenTickets</span></td>
+                                            <td><span class="badge bg-warning">@stat.InProgressTickets</span></td>
+                                            <td><span class="badge bg-info">@stat.ReviewTickets</span></td>
+                                            <td><span class="badge bg-success">@stat.CompletedTickets</span></td>
+                                            <td><span class="badge bg-secondary">@stat.OnHoldTickets</span></td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <span class="me-2">@completionRate.ToString("F1")%</span>
+                                                    <div class="progress flex-grow-1" style="height: 8px; width: 100px;">
+                                                        <div class="progress-bar bg-success" style="width: @completionRate.ToString("F1")%"></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-4">
+                            <span class="bi bi-table fs-2 d-block mb-2"></span>
+                            <p>No detailed statistics available</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ProjectDto>? projects;
+    private List<TicketDto>? allTickets;
+    private List<TicketDto>? recentTickets;
+    private List<ProjectStatDto>? projectStats;
+    private bool isLoading = true;
+    private string selectedProjectId = string.Empty;
+
+    private int totalTickets => allTickets?.Count ?? 0;
+    private int openTickets => allTickets?.Count(t => t.Status != TicketStatus.Closed) ?? 0;
+    private int closedTickets => allTickets?.Count(t => t.Status == TicketStatus.Closed) ?? 0;
+    private int criticalTickets => allTickets?.Count(t => t.Priority == TicketPriority.Critical) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            await Task.WhenAll(
+                LoadProjects(),
+                LoadTickets(),
+                LoadProjectStats()
+            );
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadProjects()
+    {
+        try
+        {
+            var response = await ApiClient.GetProjectsAsync();
+            if (response?.Success == true && response.Data != null)
+            {
+                projects = response.Data.OrderBy(p => p.Name).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading projects: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTickets()
+    {
+        try
+        {
+            if (projects != null)
+            {
+                var tickets = new List<TicketDto>();
+                foreach (var project in projects)
+                {
+                    // Apply project filter if selected
+                    if (!string.IsNullOrEmpty(selectedProjectId) && 
+                        project.Id.ToString() != selectedProjectId)
+                        continue;
+
+                    var response = await ApiClient.GetProjectTicketsAsync(project.Id);
+                    if (response?.Success == true && response.Data != null)
+                    {
+                        tickets.AddRange(response.Data);
+                    }
+                }
+                allTickets = tickets.OrderByDescending(t => t.CreatedAt).ToList();
+                recentTickets = allTickets
+                    .Where(t => t.UpdatedAt.HasValue || t.CreatedAt >= DateTime.UtcNow.AddDays(-7))
+                    .OrderByDescending(t => t.UpdatedAt ?? t.CreatedAt)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading tickets: {ex.Message}");
+        }
+    }
+
+    private async Task LoadProjectStats()
+    {
+        try
+        {
+            if (projects != null && allTickets != null)
+            {
+                var stats = new List<ProjectStatDto>();
+                foreach (var project in projects)
+                {
+                    // Apply project filter if selected
+                    if (!string.IsNullOrEmpty(selectedProjectId) && 
+                        project.Id.ToString() != selectedProjectId)
+                        continue;
+
+                    var projectTickets = allTickets.Where(t => t.ProjectId == project.Id).ToList();
+                    
+                    stats.Add(new ProjectStatDto
+                    {
+                        ProjectId = project.Id,
+                        ProjectName = project.Name,
+                        TotalTickets = projectTickets.Count,
+                        OpenTickets = projectTickets.Count(t => t.Status == TicketStatus.Open),
+                        InProgressTickets = projectTickets.Count(t => t.Status == TicketStatus.InProgress),
+                        ReviewTickets = projectTickets.Count(t => t.Status == TicketStatus.Review),
+                        CompletedTickets = projectTickets.Count(t => t.Status == TicketStatus.Closed),
+                        OnHoldTickets = projectTickets.Count(t => t.Status == TicketStatus.OnHold)
+                    });
+                }
+                projectStats = stats.OrderByDescending(s => s.TotalTickets).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading project stats: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+    private async Task OnProjectFilterChanged(ChangeEventArgs e)
+    {
+        selectedProjectId = e.Value?.ToString() ?? string.Empty;
+        await LoadData();
+    }
+
+    private double GetCompletionRate()
+    {
+        return totalTickets > 0 ? (closedTickets * 100.0 / totalTickets) : 0;
+    }
+
+    private string GetStatusDisplayName(TicketStatus status)
+    {
+        return status switch
+        {
+            TicketStatus.Open => "Open",
+            TicketStatus.InProgress => "In Progress",
+            TicketStatus.Review => "Review",
+            TicketStatus.Closed => "Closed",
+            TicketStatus.OnHold => "On Hold",
+            _ => status.ToString()
+        };
+    }
+
+    private string GetStatusColor(TicketStatus status)
+    {
+        return status switch
+        {
+            TicketStatus.Open => "primary",
+            TicketStatus.InProgress => "warning",
+            TicketStatus.Review => "info",
+            TicketStatus.Closed => "success",
+            TicketStatus.OnHold => "secondary",
+            _ => "dark"
+        };
+    }
+
+    private string GetStatusIcon(TicketStatus status)
+    {
+        return status switch
+        {
+            TicketStatus.Open => "circle",
+            TicketStatus.InProgress => "arrow-repeat",
+            TicketStatus.Review => "eye",
+            TicketStatus.Closed => "check-circle",
+            TicketStatus.OnHold => "pause-circle",
+            _ => "circle"
+        };
+    }
+
+    private string GetPriorityDisplayName(TicketPriority priority)
+    {
+        return priority switch
+        {
+            TicketPriority.Low => "Low",
+            TicketPriority.Medium => "Medium",
+            TicketPriority.High => "High",
+            TicketPriority.Critical => "Critical",
+            _ => priority.ToString()
+        };
+    }
+
+    private string GetPriorityColor(TicketPriority priority)
+    {
+        return priority switch
+        {
+            TicketPriority.Low => "secondary",
+            TicketPriority.Medium => "primary",
+            TicketPriority.High => "warning",
+            TicketPriority.Critical => "danger",
+            _ => "dark"
+        };
+    }
+
+    private string GetRelativeTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime;
+        
+        if (timeSpan.Days > 0)
+            return $"{timeSpan.Days}d ago";
+        if (timeSpan.Hours > 0)
+            return $"{timeSpan.Hours}h ago";
+        if (timeSpan.Minutes > 0)
+            return $"{timeSpan.Minutes}m ago";
+        
+        return "Just now";
+    }
+
+    private class ProjectStatDto
+    {
+        public Guid ProjectId { get; set; }
+        public string ProjectName { get; set; } = string.Empty;
+        public int TotalTickets { get; set; }
+        public int OpenTickets { get; set; }
+        public int InProgressTickets { get; set; }
+        public int ReviewTickets { get; set; }
+        public int CompletedTickets { get; set; }
+        public int OnHoldTickets { get; set; }
+    }
+}

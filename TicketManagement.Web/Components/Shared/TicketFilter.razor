@@ -1,0 +1,193 @@
+@using TicketManagement.Core.Enums
+@using TicketManagement.Contracts.DTOs
+@using TicketManagement.Contracts.Repositories
+
+<div class="card mb-3">
+    <div class="card-header">
+        <h6 class="mb-0">
+            <span class="bi bi-funnel me-2"></span>Filters
+            <button class="btn btn-sm btn-outline-secondary float-end" @onclick="ClearFilters">
+                <span class="bi bi-x-circle me-1"></span>Clear
+            </button>
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <!-- Search -->
+            <div class="col-md-6">
+                <label class="form-label">Search</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <span class="bi bi-search"></span>
+                    </span>
+                    <input type="text" class="form-control" placeholder="Search tickets..." 
+                           @bind="Filter.Keyword" @bind:event="oninput" @onkeypress="OnSearchKeyPress" />
+                </div>
+            </div>
+
+            <!-- Status -->
+            <div class="col-md-6">
+                <label class="form-label">Status</label>
+                <select class="form-select" @bind="SelectedStatus" @bind:after="OnStatusChanged">
+                    <option value="">All Statuses</option>
+                    @foreach (var status in Enum.GetValues<TicketStatus>())
+                    {
+                        <option value="@status">@GetStatusDisplayName(status)</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Priority -->
+            <div class="col-md-6">
+                <label class="form-label">Priority</label>
+                <select class="form-select" @bind="SelectedPriority" @bind:after="OnPriorityChanged">
+                    <option value="">All Priorities</option>
+                    @foreach (var priority in Enum.GetValues<TicketPriority>())
+                    {
+                        <option value="@priority">@GetPriorityDisplayName(priority)</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Project -->
+            <div class="col-md-6">
+                <label class="form-label">Project</label>
+                <select class="form-select" @bind="SelectedProjectId" @bind:after="OnProjectChanged">
+                    <option value="">All Projects</option>
+                    @if (Projects != null)
+                    {
+                        @foreach (var project in Projects)
+                        {
+                            <option value="@project.Id">@project.Name</option>
+                        }
+                    }
+                </select>
+            </div>
+
+            <!-- Assignee -->
+            <div class="col-md-6">
+                <label class="form-label">Assignee</label>
+                <select class="form-select" @bind="SelectedAssignee" @bind:after="OnAssigneeChanged">
+                    <option value="">All Assignees</option>
+                    <option value="@CurrentUserId">My Tickets</option>
+                    <option value="unassigned">Unassigned</option>
+                </select>
+            </div>
+
+            <!-- Date Range -->
+            <div class="col-md-6">
+                <label class="form-label">Created Date</label>
+                <div class="row g-2">
+                    <div class="col">
+                        <input type="date" class="form-control form-control-sm" 
+                               @bind="Filter.CreatedAfter" @bind:after="OnFilterChanged" />
+                    </div>
+                    <div class="col-auto d-flex align-items-center">
+                        <span class="text-muted">to</span>
+                    </div>
+                    <div class="col">
+                        <input type="date" class="form-control form-control-sm" 
+                               @bind="Filter.CreatedBefore" @bind:after="OnFilterChanged" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <button class="btn btn-primary" @onclick="OnFilterChanged">
+                <span class="bi bi-search me-1"></span>Apply Filters
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public TicketSearchCriteria Filter { get; set; } = new();
+    [Parameter] public EventCallback<TicketSearchCriteria> FilterChanged { get; set; }
+    [Parameter] public List<ProjectSummaryDto>? Projects { get; set; }
+    [Parameter] public string? CurrentUserId { get; set; }
+
+    private string SelectedStatus { get; set; } = string.Empty;
+    private string SelectedPriority { get; set; } = string.Empty;
+    private string SelectedProjectId { get; set; } = string.Empty;
+    private string SelectedAssignee { get; set; } = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        SelectedStatus = Filter.Statuses?.FirstOrDefault().ToString() ?? string.Empty;
+        SelectedPriority = Filter.Priorities?.FirstOrDefault().ToString() ?? string.Empty;
+        SelectedAssignee = Filter.AssigneeIds?.FirstOrDefault() ?? string.Empty;
+    }
+
+    private async Task OnFilterChanged()
+    {
+        await FilterChanged.InvokeAsync(Filter);
+    }
+
+    private async Task OnStatusChanged()
+    {
+        Filter.Statuses = string.IsNullOrEmpty(SelectedStatus) ? null : new[] { Enum.Parse<TicketStatus>(SelectedStatus) };
+        await OnFilterChanged();
+    }
+
+    private async Task OnPriorityChanged()
+    {
+        Filter.Priorities = string.IsNullOrEmpty(SelectedPriority) ? null : new[] { Enum.Parse<TicketPriority>(SelectedPriority) };
+        await OnFilterChanged();
+    }
+
+    private async Task OnProjectChanged()
+    {
+        // Note: TicketSearchCriteria doesn't have ProjectId, this might need to be handled differently
+        await OnFilterChanged();
+    }
+
+    private async Task OnAssigneeChanged()
+    {
+        Filter.AssigneeIds = string.IsNullOrEmpty(SelectedAssignee) ? null : new[] { SelectedAssignee };
+        await OnFilterChanged();
+    }
+
+    private async Task OnSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await OnFilterChanged();
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        Filter = new TicketSearchCriteria();
+        SelectedStatus = string.Empty;
+        SelectedPriority = string.Empty;
+        SelectedProjectId = string.Empty;
+        SelectedAssignee = string.Empty;
+        await OnFilterChanged();
+    }
+
+    private string GetStatusDisplayName(TicketStatus status)
+    {
+        return status switch
+        {
+            TicketStatus.Open => "Open",
+            TicketStatus.InProgress => "In Progress",
+            TicketStatus.Review => "Review",
+            TicketStatus.Closed => "Closed",
+            TicketStatus.OnHold => "On Hold",
+            _ => status.ToString()
+        };
+    }
+
+    private string GetPriorityDisplayName(TicketPriority priority)
+    {
+        return priority switch
+        {
+            TicketPriority.Low => "Low",
+            TicketPriority.Medium => "Medium",
+            TicketPriority.High => "High",
+            TicketPriority.Critical => "Critical",
+            _ => priority.ToString()
+        };
+    }
+}

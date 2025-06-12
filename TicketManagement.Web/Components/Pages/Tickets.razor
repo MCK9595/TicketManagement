@@ -1,0 +1,437 @@
+﻿@page "/tickets"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<PageTitle>My Tickets - Ticket Management</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><span class="bi bi-clipboard-data-fill" aria-hidden="true"></span> My Tickets</h1>
+    <div class="d-flex gap-2">
+        <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="ticketFilter" id="all" @onchange="@(() => FilterTickets("all"))" checked="@(currentFilter == "all")" autocomplete="off">
+            <label class="btn btn-outline-primary" for="all">All</label>
+
+            <input type="radio" class="btn-check" name="ticketFilter" id="assigned" @onchange="@(() => FilterTickets("assigned"))" checked="@(currentFilter == "assigned")" autocomplete="off">
+            <label class="btn btn-outline-primary" for="assigned">Assigned to Me</label>
+
+            <input type="radio" class="btn-check" name="ticketFilter" id="created" @onchange="@(() => FilterTickets("created"))" checked="@(currentFilter == "created")" autocomplete="off">
+            <label class="btn btn-outline-primary" for="created">Created by Me</label>
+        </div>
+    </div>
+</div>
+
+<!-- Search and Filter Bar -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <input type="text" class="form-control" placeholder="Search tickets..." @bind="searchKeyword" @onkeypress="@OnSearchKeyPress">
+                    <button class="btn btn-outline-secondary" type="button" @onclick="SearchTickets">
+                        <span class="bi bi-search" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" @onchange="OnStatusFilterChanged">
+                    <option value="">All Status</option>
+                    <option value="Open">Open</option>
+                    <option value="InProgress">In Progress</option>
+                    <option value="Review">Review</option>
+                    <option value="Closed">Closed</option>
+                    <option value="OnHold">On Hold</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" @onchange="OnPriorityFilterChanged">
+                    <option value="">All Priority</option>
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Critical">Critical</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" @onchange="OnProjectFilterChanged">
+                    <option value="">All Projects</option>
+                    @if (projects != null)
+                    {
+                        @foreach (var project in projects)
+                        {
+                            <option value="@project.Id">@project.Name</option>
+                        }
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-secondary w-100" @onclick="ClearFilters">
+                    <span class="bi bi-x-circle" aria-hidden="true"></span> Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading tickets...</p>
+    </div>
+}
+else if (filteredTickets?.Any() == true)
+{
+    <!-- Tickets Summary -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-primary">@filteredTickets.Count</h5>
+                    <p class="card-text text-muted">Total Tickets</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-success">@filteredTickets.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Open)</h5>
+                    <p class="card-text text-muted">Open</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-warning">@filteredTickets.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.InProgress)</h5>
+                    <p class="card-text text-muted">In Progress</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-secondary">@filteredTickets.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Closed)</h5>
+                    <p class="card-text text-muted">Closed</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tickets Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Tickets (@filteredTickets.Count)</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Project</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Assignee</th>
+                            <th>Created</th>
+                            <th>Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var ticket in filteredTickets.Take(50))
+                        {
+                            <tr>
+                                <td>
+                                    <a href="/tickets/@ticket.Id" class="text-decoration-none fw-bold">
+                                        @ticket.Title
+                                    </a>
+                                    @if (!string.IsNullOrEmpty(ticket.Description))
+                                    {
+                                        <br>
+                                        <small class="text-muted">@(ticket.Description.Length > 100 ? ticket.Description.Substring(0, 100) + "..." : ticket.Description)</small>
+                                    }
+                                </td>
+                                <td>
+                                    <a href="/projects/@ticket.ProjectId" class="text-decoration-none">
+                                        @ticket.ProjectName
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge bg-@GetStatusColor(ticket.Status)">@ticket.Status</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-@GetPriorityColor(ticket.Priority)">@ticket.Priority</span>
+                                </td>
+                                <td>
+                                    @if (ticket.Assignments?.Any() == true)
+                                    {
+                                        <span class="text-muted">@ticket.Assignments.Count assigned</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Unassigned</span>
+                                    }
+                                </td>
+                                <td>
+                                    <small class="text-muted">@ticket.CreatedAt.ToString("MMM dd, yyyy")</small>
+                                </td>
+                                <td>
+                                    <small class="text-muted">@ticket.UpdatedAt?.ToString("MMM dd, yyyy")</small>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="/tickets/@ticket.Id" class="btn btn-outline-primary btn-sm">
+                                            <span class="bi bi-eye" aria-hidden="true"></span>
+                                        </a>
+                                        <a href="/projects/@ticket.ProjectId" class="btn btn-outline-secondary btn-sm">
+                                            <span class="bi bi-folder" aria-hidden="true"></span>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (filteredTickets.Count > 50)
+            {
+                <div class="alert alert-info mt-3">
+                    <span class="bi bi-info-circle" aria-hidden="true"></span>
+                    Showing first 50 of @filteredTickets.Count tickets. Use filters to narrow down results.
+                </div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <span class="bi bi-clipboard-x fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+        <h3>No tickets found</h3>
+        <p class="text-muted mb-4">
+            @if (hasActiveFilters)
+            {
+                <span>No tickets match your current filters. Try adjusting your search criteria.</span>
+            }
+            else
+            {
+                <span>You don't have any tickets yet. Create a project and start adding tickets.</span>
+            }
+        </p>
+        @if (hasActiveFilters)
+        {
+            <button class="btn btn-primary" @onclick="ClearFilters">
+                <span class="bi bi-x-circle" aria-hidden="true"></span> Clear Filters
+            </button>
+        }
+        else
+        {
+            <a href="/projects" class="btn btn-primary">
+                <span class="bi bi-folder-plus" aria-hidden="true"></span> View Projects
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private List<TicketDto>? allTickets;
+    private List<TicketDto>? filteredTickets;
+    private List<ProjectDto>? projects;
+    private bool isLoading = true;
+    private string currentFilter = "all";
+    private string searchKeyword = string.Empty;
+    private string statusFilter = string.Empty;
+    private string priorityFilter = string.Empty;
+    private string projectFilter = string.Empty;
+    private bool hasActiveFilters => !string.IsNullOrEmpty(searchKeyword) || !string.IsNullOrEmpty(statusFilter) || !string.IsNullOrEmpty(priorityFilter) || !string.IsNullOrEmpty(projectFilter);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProjects();
+        await LoadTickets();
+    }
+
+    private async Task LoadProjects()
+    {
+        try
+        {
+            var response = await ApiClient.GetProjectsAsync();
+            if (response?.Success == true && response.Data != null)
+            {
+                projects = response.Data;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading projects: {ex.Message}");
+        }
+    }
+
+    private async Task LoadTickets()
+    {
+        isLoading = true;
+        try
+        {
+            if (projects != null)
+            {
+                var tickets = new List<TicketDto>();
+                foreach (var project in projects)
+                {
+                    var response = await ApiClient.GetProjectTicketsAsync(project.Id);
+                    if (response?.Success == true && response.Data != null)
+                    {
+                        tickets.AddRange(response.Data);
+                    }
+                }
+                allTickets = tickets.OrderByDescending(t => t.CreatedAt).ToList();
+                ApplyFilters();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading tickets: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void FilterTickets(string filter)
+    {
+        currentFilter = filter;
+        ApplyFilters();
+    }
+
+    private void SearchTickets()
+    {
+        ApplyFilters();
+    }
+
+    private void OnSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            SearchTickets();
+        }
+    }
+
+    private void OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        statusFilter = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
+    }
+
+    private void OnPriorityFilterChanged(ChangeEventArgs e)
+    {
+        priorityFilter = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
+    }
+
+    private void OnProjectFilterChanged(ChangeEventArgs e)
+    {
+        projectFilter = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        if (allTickets == null)
+        {
+            filteredTickets = new List<TicketDto>();
+            return;
+        }
+
+        var filtered = allTickets.AsEnumerable();
+
+        // Apply user filter
+        switch (currentFilter)
+        {
+            case "assigned":
+                // Note: This would need user ID comparison in real implementation
+                filtered = filtered.Where(t => t.Assignments?.Any() == true);
+                break;
+            case "created":
+                // Note: This would need created by user ID comparison in real implementation
+                break;
+        }
+
+        // Apply search
+        if (!string.IsNullOrWhiteSpace(searchKeyword))
+        {
+            filtered = filtered.Where(t => 
+                t.Title.Contains(searchKeyword, StringComparison.OrdinalIgnoreCase) ||
+                (t.Description?.Contains(searchKeyword, StringComparison.OrdinalIgnoreCase) == true) ||
+                (t.ProjectName?.Contains(searchKeyword, StringComparison.OrdinalIgnoreCase) == true));
+        }
+
+        // Apply status filter
+        if (!string.IsNullOrEmpty(statusFilter))
+        {
+            if (Enum.TryParse<TicketManagement.Core.Enums.TicketStatus>(statusFilter, out var status))
+            {
+                filtered = filtered.Where(t => t.Status == status);
+            }
+        }
+
+        // Apply priority filter
+        if (!string.IsNullOrEmpty(priorityFilter))
+        {
+            if (Enum.TryParse<TicketManagement.Core.Enums.TicketPriority>(priorityFilter, out var priority))
+            {
+                filtered = filtered.Where(t => t.Priority == priority);
+            }
+        }
+
+        // Apply project filter
+        if (!string.IsNullOrEmpty(projectFilter))
+        {
+            if (Guid.TryParse(projectFilter, out var projectId))
+            {
+                filtered = filtered.Where(t => t.ProjectId == projectId);
+            }
+        }
+
+        filteredTickets = filtered.ToList();
+    }
+
+    private void ClearFilters()
+    {
+        searchKeyword = string.Empty;
+        statusFilter = string.Empty;
+        priorityFilter = string.Empty;
+        projectFilter = string.Empty;
+        ApplyFilters();
+    }
+
+    private string GetStatusColor(TicketManagement.Core.Enums.TicketStatus status)
+    {
+        return status switch
+        {
+            TicketManagement.Core.Enums.TicketStatus.Open => "primary",
+            TicketManagement.Core.Enums.TicketStatus.InProgress => "warning",
+            TicketManagement.Core.Enums.TicketStatus.Review => "info",
+            TicketManagement.Core.Enums.TicketStatus.Closed => "success",
+            TicketManagement.Core.Enums.TicketStatus.OnHold => "secondary",
+            _ => "dark"
+        };
+    }
+
+    private string GetPriorityColor(TicketManagement.Core.Enums.TicketPriority priority)
+    {
+        return priority switch
+        {
+            TicketManagement.Core.Enums.TicketPriority.Low => "secondary",
+            TicketManagement.Core.Enums.TicketPriority.Medium => "primary",
+            TicketManagement.Core.Enums.TicketPriority.High => "warning",
+            TicketManagement.Core.Enums.TicketPriority.Critical => "danger",
+            _ => "dark"
+        };
+    }
+}

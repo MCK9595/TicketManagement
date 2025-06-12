@@ -1,0 +1,48 @@
+@page "/login"
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.OpenIdConnect
+@inject NavigationManager Navigation
+
+<PageTitle>Login - Ticket Management</PageTitle>
+
+<div class="container-fluid vh-100 d-flex align-items-center justify-content-center">
+    <div class="row w-100">
+        <div class="col-md-6 col-lg-4 mx-auto">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <span class="bi bi-clipboard-check fs-1 text-primary d-block mb-3" aria-hidden="true"></span>
+                        <h2 class="mb-0">Ticket Management</h2>
+                        <p class="text-muted">Please sign in to continue</p>
+                    </div>
+
+                    <AuthorizeView>
+                        <Authorized>
+                            <div class="alert alert-info text-center">
+                                <span class="bi bi-check-circle me-2" aria-hidden="true"></span>
+                                You are already logged in as @context.User.Identity?.Name
+                                <div class="mt-3">
+                                    <a href="/" class="btn btn-primary">Go to Dashboard</a>
+                                </div>
+                            </div>
+                        </Authorized>
+                        <NotAuthorized>
+                            <div class="d-grid">
+                                <a href="/Account/Challenge" class="btn btn-primary btn-lg">
+                                    <span class="bi bi-box-arrow-in-right me-2" aria-hidden="true"></span>
+                                    Sign in with Keycloak
+                                </a>
+                            </div>
+
+                            <div class="text-center mt-4">
+                                <small class="text-muted">
+                                    Secure authentication powered by Keycloak
+                                </small>
+                            </div>
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

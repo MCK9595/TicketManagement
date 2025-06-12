@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Sdk Name="Aspire.AppHost.Sdk" Version="9.3.0" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>8ea7eeec-7613-420b-b424-179e3431a2c3</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TicketManagement.ApiService\TicketManagement.ApiService.csproj" />
+    <ProjectReference Include="..\TicketManagement.Web\TicketManagement.Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.3.0" />
+    <PackageReference Include="Aspire.Hosting.Keycloak" Version="9.3.0-preview.1.25265.20" />
+    <PackageReference Include="Aspire.Hosting.SqlServer" Version="9.3.0" />
+  </ItemGroup>
+
+</Project>

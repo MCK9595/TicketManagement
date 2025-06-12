@@ -1,0 +1,242 @@
+﻿@page "/"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using Microsoft.AspNetCore.Authorization
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<PageTitle>Dashboard - Ticket Management</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><span class="bi bi-speedometer2" aria-hidden="true"></span> Dashboard</h1>
+    <AuthorizeView>
+        <Authorized>
+            <div class="text-muted">
+                Welcome back, @context.User.Identity?.Name
+            </div>
+        </Authorized>
+        <NotAuthorized>
+            <a href="/login" class="btn btn-primary">
+                <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login to continue
+            </a>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="row">
+            <!-- Quick Stats -->
+            <div class="col-md-3 mb-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title">@totalProjects</h4>
+                                <p class="card-text">My Projects</p>
+                            </div>
+                            <div class="align-self-center">
+                                <span class="bi bi-folder-fill fs-1" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3 mb-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title">@totalTickets</h4>
+                                <p class="card-text">Total Tickets</p>
+                            </div>
+                            <div class="align-self-center">
+                                <span class="bi bi-clipboard-data-fill fs-1" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3 mb-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title">@openTickets</h4>
+                                <p class="card-text">Open Tickets</p>
+                            </div>
+                            <div class="align-self-center">
+                                <span class="bi bi-clipboard-check-fill fs-1" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-3 mb-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title">@assignedTickets</h4>
+                                <p class="card-text">Assigned to Me</p>
+                            </div>
+                            <div class="align-self-center">
+                                <span class="bi bi-person-check-fill fs-1" aria-hidden="true"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Projects -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Recent Projects</h5>
+                        <a href="/projects" class="btn btn-sm btn-outline-primary">View All</a>
+                    </div>
+                    <div class="card-body">
+                        @if (recentProjects?.Any() == true)
+                        {
+                            <div class="list-group list-group-flush">
+                                @foreach (var project in recentProjects.Take(5))
+                                {
+                                    <a href="/projects/@project.Id" class="list-group-item list-group-item-action">
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <h6 class="mb-1">@project.Name</h6>
+                                            <small class="text-muted">@project.CreatedAt.ToString("MMM dd")</small>
+                                        </div>
+                                        <p class="mb-1 text-muted">@project.Description</p>
+                                    </a>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-4">
+                                <span class="bi bi-folder-x fs-1 d-block mb-2" aria-hidden="true"></span>
+                                <p>No projects found</p>
+                                <a href="/projects" class="btn btn-primary">Create Your First Project</a>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Tickets -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Recent Tickets</h5>
+                        <a href="/tickets" class="btn btn-sm btn-outline-primary">View All</a>
+                    </div>
+                    <div class="card-body">
+                        @if (recentTickets?.Any() == true)
+                        {
+                            <div class="list-group list-group-flush">
+                                @foreach (var ticket in recentTickets.Take(5))
+                                {
+                                    <a href="/tickets/@ticket.Id" class="list-group-item list-group-item-action">
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <h6 class="mb-1">@ticket.Title</h6>
+                                            <small class="text-muted">
+                                                <span class="badge bg-@GetStatusColor(ticket.Status)">@ticket.Status</span>
+                                            </small>
+                                        </div>
+                                        <p class="mb-1 text-muted">@ticket.ProjectName</p>
+                                        <small class="text-muted">Priority: @ticket.Priority</small>
+                                    </a>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-4">
+                                <span class="bi bi-clipboard-x fs-1 d-block mb-2" aria-hidden="true"></span>
+                                <p>No tickets found</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="text-center py-5">
+            <span class="bi bi-shield-lock fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+            <h2>Welcome to Ticket Management System</h2>
+            <p class="lead text-muted mb-4">Please log in to access your projects and tickets.</p>
+            <a href="/login" class="btn btn-primary btn-lg">
+                <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login
+            </a>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<ProjectDto>? recentProjects;
+    private List<TicketDto>? recentTickets;
+    private int totalProjects = 0;
+    private int totalTickets = 0;
+    private int openTickets = 0;
+    private int assignedTickets = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        try
+        {
+            // Load projects
+            var projectsResponse = await ApiClient.GetProjectsAsync();
+            if (projectsResponse?.Success == true && projectsResponse.Data != null)
+            {
+                recentProjects = projectsResponse.Data.OrderByDescending(p => p.CreatedAt).ToList();
+                totalProjects = recentProjects.Count;
+
+                // Load tickets for each project and aggregate
+                var allTickets = new List<TicketDto>();
+                foreach (var project in recentProjects)
+                {
+                    var ticketsResponse = await ApiClient.GetProjectTicketsAsync(project.Id);
+                    if (ticketsResponse?.Success == true && ticketsResponse.Data != null)
+                    {
+                        allTickets.AddRange(ticketsResponse.Data);
+                    }
+                }
+
+                recentTickets = allTickets.OrderByDescending(t => t.CreatedAt).ToList();
+                totalTickets = allTickets.Count;
+                openTickets = allTickets.Count(t => t.Status != TicketManagement.Core.Enums.TicketStatus.Closed);
+                assignedTickets = allTickets.Count(t => t.Assignments.Any());
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error or show notification
+            Console.WriteLine($"Error loading dashboard data: {ex.Message}");
+        }
+    }
+
+    private string GetStatusColor(TicketManagement.Core.Enums.TicketStatus status)
+    {
+        return status switch
+        {
+            TicketManagement.Core.Enums.TicketStatus.Open => "primary",
+            TicketManagement.Core.Enums.TicketStatus.InProgress => "warning",
+            TicketManagement.Core.Enums.TicketStatus.Review => "info",
+            TicketManagement.Core.Enums.TicketStatus.Closed => "success",
+            TicketManagement.Core.Enums.TicketStatus.OnHold => "dark",
+            _ => "secondary"
+        };
+    }
+}

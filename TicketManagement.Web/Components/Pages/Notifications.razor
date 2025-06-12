@@ -1,0 +1,359 @@
+﻿@page "/notifications"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<PageTitle>Notifications - Ticket Management</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><span class="bi bi-bell-fill" aria-hidden="true"></span> Notifications</h1>
+    <div class="d-flex gap-2">
+        @if (notifications?.Any(n => !n.IsRead) == true)
+        {
+            <button class="btn btn-outline-primary" @onclick="MarkAllAsRead">
+                <span class="bi bi-check-all" aria-hidden="true"></span> Mark All as Read
+            </button>
+        }
+        <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="notificationFilter" id="all" @onchange="@(() => FilterNotifications("all"))" checked="@(currentFilter == "all")" autocomplete="off">
+            <label class="btn btn-outline-secondary" for="all">All</label>
+
+            <input type="radio" class="btn-check" name="notificationFilter" id="unread" @onchange="@(() => FilterNotifications("unread"))" checked="@(currentFilter == "unread")" autocomplete="off">
+            <label class="btn btn-outline-secondary" for="unread">Unread</label>
+
+            <input type="radio" class="btn-check" name="notificationFilter" id="read" @onchange="@(() => FilterNotifications("read"))" checked="@(currentFilter == "read")" autocomplete="off">
+            <label class="btn btn-outline-secondary" for="read">Read</label>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading notifications...</p>
+    </div>
+}
+else if (filteredNotifications?.Any() == true)
+{
+    <!-- Notification Summary -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-primary">@(notifications?.Count ?? 0)</h5>
+                    <p class="card-text text-muted">Total</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-warning">@(notifications?.Count(n => !n.IsRead) ?? 0)</h5>
+                    <p class="card-text text-muted">Unread</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-success">@(notifications?.Count(n => n.IsRead) ?? 0)</h5>
+                    <p class="card-text text-muted">Read</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-info">@(notifications?.Count(n => n.CreatedAt.Date == DateTime.Today) ?? 0)</h5>
+                    <p class="card-text text-muted">Today</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notifications List -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Notifications (@filteredNotifications.Count)</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="list-group list-group-flush">
+                @foreach (var notification in filteredNotifications)
+                {
+                    <div class="list-group-item @(notification.IsRead ? "" : "list-group-item-warning") position-relative" 
+                         style="cursor: pointer;" @onclick="() => HandleNotificationClick(notification)">
+                        
+                        @if (!notification.IsRead)
+                        {
+                            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle">
+                                <span class="visually-hidden">New notification</span>
+                            </span>
+                        }
+
+                        <div class="d-flex w-100 justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="bi bi-@GetNotificationIcon(notification.Type) text-@GetNotificationColor(notification.Type) me-2" aria-hidden="true"></span>
+                                    <h6 class="mb-0 @(notification.IsRead ? "text-muted" : "fw-bold")">
+                                        @GetNotificationTitle(notification.Type)
+                                    </h6>
+                                    <small class="text-muted ms-auto">@GetRelativeTime(notification.CreatedAt)</small>
+                                </div>
+                                <p class="mb-1 @(notification.IsRead ? "text-muted" : "")">@notification.Message</p>
+                                @if (notification.RelatedTicketId.HasValue)
+                                {
+                                    <small class="text-muted">
+                                        @if (notification.Type == TicketManagement.Core.Enums.NotificationType.TicketAssigned ||
+                                             notification.Type == TicketManagement.Core.Enums.NotificationType.CommentAdded ||
+                                             notification.Type == TicketManagement.Core.Enums.NotificationType.StatusChanged ||
+                                             notification.Type == TicketManagement.Core.Enums.NotificationType.MentionedInComment)
+                                        {
+                                            <span>Click to view ticket</span>
+                                        }
+                                    </small>
+                                }
+                            </div>
+                            <div class="ms-3">
+                                @if (!notification.IsRead)
+                                {
+                                    <button class="btn btn-outline-success btn-sm" @onclick:stopPropagation="true" @onclick="() => MarkAsRead(notification)">
+                                        <span class="bi bi-check" aria-hidden="true"></span>
+                                    </button>
+                                }
+                                <button class="btn btn-outline-danger btn-sm ms-1" @onclick:stopPropagation="true" @onclick="() => DeleteNotification(notification)">
+                                    <span class="bi bi-trash" aria-hidden="true"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (filteredNotifications.Count > 20)
+            {
+                <div class="p-3 border-top text-center">
+                    <small class="text-muted">Showing first 20 notifications</small>
+                </div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <span class="bi bi-bell-slash fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+        <h3>No notifications</h3>
+        <p class="text-muted mb-4">
+            @if (currentFilter == "unread")
+            {
+                <span>You have no unread notifications.</span>
+            }
+            else if (currentFilter == "read")
+            {
+                <span>You have no read notifications.</span>
+            }
+            else
+            {
+                <span>You don't have any notifications yet. We'll notify you when there's activity on your projects and tickets.</span>
+            }
+        </p>
+        @if (currentFilter != "all")
+        {
+            <button class="btn btn-primary" @onclick="@(() => FilterNotifications("all"))">
+                <span class="bi bi-bell" aria-hidden="true"></span> View All Notifications
+            </button>
+        }
+    </div>
+}
+
+@code {
+    private List<NotificationDto>? notifications;
+    private List<NotificationDto>? filteredNotifications;
+    private bool isLoading = true;
+    private string currentFilter = "all";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNotifications();
+    }
+
+    private async Task LoadNotifications()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await ApiClient.GetNotificationsAsync();
+            if (response?.Success == true && response.Data != null)
+            {
+                notifications = response.Data.OrderByDescending(n => n.CreatedAt).ToList();
+                ApplyFilter();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading notifications: {ex.Message}");
+            notifications = new List<NotificationDto>();
+            ApplyFilter();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void FilterNotifications(string filter)
+    {
+        currentFilter = filter;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        if (notifications == null)
+        {
+            filteredNotifications = new List<NotificationDto>();
+            return;
+        }
+
+        filteredNotifications = currentFilter switch
+        {
+            "unread" => notifications.Where(n => !n.IsRead).Take(20).ToList(),
+            "read" => notifications.Where(n => n.IsRead).Take(20).ToList(),
+            _ => notifications.Take(20).ToList()
+        };
+    }
+
+    private async Task MarkAsRead(NotificationDto notification)
+    {
+        try
+        {
+            var response = await ApiClient.MarkNotificationAsReadAsync(notification.Id);
+            if (response?.Success == true)
+            {
+                notification.IsRead = true;
+                ApplyFilter();
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error marking notification as read: {ex.Message}");
+        }
+    }
+
+    private async Task MarkAllAsRead()
+    {
+        try
+        {
+            if (notifications != null)
+            {
+                foreach (var notification in notifications.Where(n => !n.IsRead))
+                {
+                    await MarkAsRead(notification);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error marking all notifications as read: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteNotification(NotificationDto notification)
+    {
+        try
+        {
+            var response = await ApiClient.DeleteNotificationAsync(notification.Id);
+            if (response?.Success == true)
+            {
+                notifications?.Remove(notification);
+                ApplyFilter();
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting notification: {ex.Message}");
+        }
+    }
+
+    private async Task HandleNotificationClick(NotificationDto notification)
+    {
+        // Mark as read if not already
+        if (!notification.IsRead)
+        {
+            await MarkAsRead(notification);
+        }
+
+        // Navigate based on notification type
+        if (notification.RelatedTicketId.HasValue)
+        {
+            switch (notification.Type)
+            {
+                case TicketManagement.Core.Enums.NotificationType.TicketAssigned:
+                case TicketManagement.Core.Enums.NotificationType.CommentAdded:
+                case TicketManagement.Core.Enums.NotificationType.StatusChanged:
+                case TicketManagement.Core.Enums.NotificationType.MentionedInComment:
+                    Navigation.NavigateTo($"/tickets/{notification.RelatedTicketId}");
+                    break;
+            }
+        }
+    }
+
+    private string GetNotificationIcon(TicketManagement.Core.Enums.NotificationType type)
+    {
+        return type switch
+        {
+            TicketManagement.Core.Enums.NotificationType.TicketAssigned => "person-check",
+            TicketManagement.Core.Enums.NotificationType.CommentAdded => "chat-left-text",
+            TicketManagement.Core.Enums.NotificationType.StatusChanged => "arrow-repeat",
+            TicketManagement.Core.Enums.NotificationType.MentionedInComment => "at",
+            _ => "bell"
+        };
+    }
+
+    private string GetNotificationColor(TicketManagement.Core.Enums.NotificationType type)
+    {
+        return type switch
+        {
+            TicketManagement.Core.Enums.NotificationType.TicketAssigned => "info",
+            TicketManagement.Core.Enums.NotificationType.CommentAdded => "warning",
+            TicketManagement.Core.Enums.NotificationType.StatusChanged => "primary",
+            TicketManagement.Core.Enums.NotificationType.MentionedInComment => "danger",
+            _ => "secondary"
+        };
+    }
+
+    private string GetNotificationTitle(TicketManagement.Core.Enums.NotificationType type)
+    {
+        return type switch
+        {
+            TicketManagement.Core.Enums.NotificationType.TicketAssigned => "Ticket Assigned",
+            TicketManagement.Core.Enums.NotificationType.CommentAdded => "New Comment",
+            TicketManagement.Core.Enums.NotificationType.StatusChanged => "Status Changed",
+            TicketManagement.Core.Enums.NotificationType.MentionedInComment => "You Were Mentioned",
+            _ => "Notification"
+        };
+    }
+
+    private string GetRelativeTime(DateTime dateTime)
+    {
+        var timeSpan = DateTime.UtcNow - dateTime;
+        
+        if (timeSpan.Days > 0)
+            return $"{timeSpan.Days}d ago";
+        if (timeSpan.Hours > 0)
+            return $"{timeSpan.Hours}h ago";
+        if (timeSpan.Minutes > 0)
+            return $"{timeSpan.Minutes}m ago";
+        
+        return "Just now";
+    }
+
+
+}
