@@ -68,7 +68,21 @@ public class ProjectsController : ControllerBase
                 TicketCount = p.Tickets?.Count ?? 0
             }).ToList();
 
-            return Ok(ApiResponseDto<List<ProjectDto>>.SuccessResult(projectDtos));
+            _logger.LogInformation("Returning {ProjectCount} projects for user {UserId}", projectDtos.Count, userId);
+            var result = ApiResponseDto<List<ProjectDto>>.SuccessResult(projectDtos);
+            
+            // Debug: Log the serialized result
+            try
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(result);
+                _logger.LogDebug("GetProjects serialized response: {Json}", json);
+            }
+            catch (Exception serEx)
+            {
+                _logger.LogError(serEx, "Failed to serialize GetProjects response for debugging");
+            }
+
+            return result;
         }
         catch (Exception ex)
         {
@@ -118,7 +132,7 @@ public class ProjectsController : ControllerBase
                 TicketCount = project.Tickets?.Count ?? 0
             };
 
-            return Ok(ApiResponseDto<ProjectDto>.SuccessResult(projectDto));
+            return ApiResponseDto<ProjectDto>.SuccessResult(projectDto);
         }
         catch (Exception ex)
         {
@@ -134,18 +148,28 @@ public class ProjectsController : ControllerBase
     [Authorize]
     public async Task<ActionResult<ApiResponseDto<ProjectDto>>> CreateProject([FromBody] CreateProjectDto dto)
     {
+        _logger.LogInformation("CreateProject called with Name: {Name}, Description: {Description}", dto?.Name, dto?.Description);
+        
         try
         {
+            if (dto == null)
+            {
+                _logger.LogWarning("CreateProject called with null DTO");
+                return BadRequest(ApiResponseDto<ProjectDto>.ErrorResult("Project data is required"));
+            }
+            
             if (!ModelState.IsValid)
             {
                 var errors = ModelState.Values
                     .SelectMany(v => v.Errors)
                     .Select(e => e.ErrorMessage)
                     .ToList();
+                _logger.LogWarning("CreateProject validation failed: {Errors}", string.Join(", ", errors));
                 return BadRequest(ApiResponseDto<ProjectDto>.ErrorResult(errors));
             }
 
             var userId = GetCurrentUserId();
+            _logger.LogInformation("Creating project for user: {UserId}", userId);
             var project = await _projectService.CreateProjectAsync(dto.Name, dto.Description, userId);
 
             var projectDto = new ProjectDto
@@ -167,12 +191,25 @@ public class ProjectsController : ControllerBase
                 TicketCount = 0
             };
 
-            return CreatedAtAction(nameof(GetProject), new { id = project.Id }, 
-                ApiResponseDto<ProjectDto>.SuccessResult(projectDto, "Project created successfully"));
+            _logger.LogInformation("Project created successfully: {ProjectId}", project.Id);
+            var result = ApiResponseDto<ProjectDto>.SuccessResult(projectDto, "Project created successfully");
+            
+            // Debug: Log the serialized result
+            try
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(result);
+                _logger.LogDebug("Serialized response: {Json}", json);
+            }
+            catch (Exception serEx)
+            {
+                _logger.LogError(serEx, "Failed to serialize response for debugging");
+            }
+            
+            return Created($"api/projects/{project.Id}", result);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating project");
+            _logger.LogError(ex, "Error creating project: {Message}", ex.Message);
             return StatusCode(500, ApiResponseDto<ProjectDto>.ErrorResult("Internal server error"));
         }
     }
@@ -224,7 +261,7 @@ public class ProjectsController : ControllerBase
                 TicketCount = project.Tickets?.Count ?? 0
             };
 
-            return Ok(ApiResponseDto<ProjectDto>.SuccessResult(projectDto, "Project updated successfully"));
+            return ApiResponseDto<ProjectDto>.SuccessResult(projectDto, "Project updated successfully");
         }
         catch (ArgumentException ex)
         {
@@ -262,7 +299,7 @@ public class ProjectsController : ControllerBase
                 JoinedAt = m.JoinedAt
             }).ToList();
 
-            return Ok(ApiResponseDto<List<ProjectMemberDto>>.SuccessResult(memberDtos));
+            return ApiResponseDto<List<ProjectMemberDto>>.SuccessResult(memberDtos);
         }
         catch (Exception ex)
         {
@@ -307,7 +344,7 @@ public class ProjectsController : ControllerBase
                 JoinedAt = member.JoinedAt
             };
 
-            return Ok(ApiResponseDto<ProjectMemberDto>.SuccessResult(memberDto, "Member added successfully"));
+            return ApiResponseDto<ProjectMemberDto>.SuccessResult(memberDto, "Member added successfully");
         }
         catch (InvalidOperationException ex)
         {
@@ -361,7 +398,7 @@ public class ProjectsController : ControllerBase
                 JoinedAt = member.JoinedAt
             };
 
-            return Ok(ApiResponseDto<ProjectMemberDto>.SuccessResult(memberDto, "Member role updated successfully"));
+            return ApiResponseDto<ProjectMemberDto>.SuccessResult(memberDto, "Member role updated successfully");
         }
         catch (ArgumentException ex)
         {
@@ -392,7 +429,7 @@ public class ProjectsController : ControllerBase
 
             await _projectService.RemoveMemberAsync(id, userId, currentUserId);
 
-            return Ok(ApiResponseDto<string>.SuccessResult("success", "Member removed successfully"));
+            return ApiResponseDto<string>.SuccessResult("success", "Member removed successfully");
         }
         catch (ArgumentException ex)
         {

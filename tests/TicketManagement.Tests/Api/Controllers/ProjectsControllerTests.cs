@@ -83,11 +83,8 @@ public class ProjectsControllerTests
         var result = await _controller.GetProjects();
 
         // Assert
-        Assert.That(result.Result, Is.TypeOf<OkObjectResult>());
-        var okResult = result.Result as OkObjectResult;
-        Assert.That(okResult, Is.Not.Null);
-
-        var response = okResult.Value as ApiResponseDto<List<ProjectDto>>;
+        Assert.That(result.Value, Is.TypeOf<ApiResponseDto<List<ProjectDto>>>());
+        var response = result.Value as ApiResponseDto<List<ProjectDto>>;
         Assert.That(response, Is.Not.Null);
         Assert.That(response.Success, Is.True);
         Assert.That(response.Data.Count, Is.EqualTo(2));
@@ -120,11 +117,8 @@ public class ProjectsControllerTests
         var result = await _controller.GetProject(projectId);
 
         // Assert
-        Assert.That(result.Result, Is.TypeOf<OkObjectResult>());
-        var okResult = result.Result as OkObjectResult;
-        Assert.That(okResult, Is.Not.Null);
-
-        var response = okResult.Value as ApiResponseDto<ProjectDto>;
+        Assert.That(result.Value, Is.TypeOf<ApiResponseDto<ProjectDto>>());
+        var response = result.Value as ApiResponseDto<ProjectDto>;
         Assert.That(response, Is.Not.Null);
         Assert.That(response.Success, Is.True);
         Assert.That(response.Data.Id, Is.EqualTo(projectId));
@@ -200,8 +194,8 @@ public class ProjectsControllerTests
         var result = await _controller.CreateProject(createDto);
 
         // Assert
-        Assert.That(result.Result, Is.TypeOf<CreatedAtActionResult>());
-        var createdResult = result.Result as CreatedAtActionResult;
+        Assert.That(result.Result, Is.TypeOf<CreatedResult>());
+        var createdResult = result.Result as CreatedResult;
         Assert.That(createdResult, Is.Not.Null);
 
         var response = createdResult.Value as ApiResponseDto<ProjectDto>;
@@ -243,11 +237,8 @@ public class ProjectsControllerTests
         var result = await _controller.UpdateProject(projectId, updateDto);
 
         // Assert
-        Assert.That(result.Result, Is.TypeOf<OkObjectResult>());
-        var okResult = result.Result as OkObjectResult;
-        Assert.That(okResult, Is.Not.Null);
-
-        var response = okResult.Value as ApiResponseDto<ProjectDto>;
+        Assert.That(result.Value, Is.TypeOf<ApiResponseDto<ProjectDto>>());
+        var response = result.Value as ApiResponseDto<ProjectDto>;
         Assert.That(response, Is.Not.Null);
         Assert.That(response.Success, Is.True);
         Assert.That(response.Data.Name, Is.EqualTo(updateDto.Name));
@@ -304,11 +295,8 @@ public class ProjectsControllerTests
         var result = await _controller.AddProjectMember(projectId, addMemberDto);
 
         // Assert
-        Assert.That(result.Result, Is.TypeOf<OkObjectResult>());
-        var okResult = result.Result as OkObjectResult;
-        Assert.That(okResult, Is.Not.Null);
-
-        var response = okResult.Value as ApiResponseDto<ProjectMemberDto>;
+        Assert.That(result.Value, Is.TypeOf<ApiResponseDto<ProjectMemberDto>>());
+        var response = result.Value as ApiResponseDto<ProjectMemberDto>;
         Assert.That(response, Is.Not.Null);
         Assert.That(response.Success, Is.True);
         Assert.That(response.Data.UserId, Is.EqualTo(addMemberDto.UserId));
@@ -370,11 +358,8 @@ public class ProjectsControllerTests
         var result = await _controller.GetProjectMembers(projectId);
 
         // Assert
-        Assert.That(result.Result, Is.TypeOf<OkObjectResult>());
-        var okResult = result.Result as OkObjectResult;
-        Assert.That(okResult, Is.Not.Null);
-
-        var response = okResult.Value as ApiResponseDto<List<ProjectMemberDto>>;
+        Assert.That(result.Value, Is.TypeOf<ApiResponseDto<List<ProjectMemberDto>>>());
+        var response = result.Value as ApiResponseDto<List<ProjectMemberDto>>;
         Assert.That(response, Is.Not.Null);
         Assert.That(response.Success, Is.True);
         Assert.That(response.Data.Count, Is.EqualTo(2));
@@ -394,11 +379,8 @@ public class ProjectsControllerTests
         var result = await _controller.RemoveProjectMember(projectId, userIdToRemove);
 
         // Assert
-        Assert.That(result.Result, Is.TypeOf<OkObjectResult>());
-        var okResult = result.Result as OkObjectResult;
-        Assert.That(okResult, Is.Not.Null);
-
-        var response = okResult.Value as ApiResponseDto<string>;
+        Assert.That(result.Value, Is.TypeOf<ApiResponseDto<string>>());
+        var response = result.Value as ApiResponseDto<string>;
         Assert.That(response, Is.Not.Null);
         Assert.That(response.Success, Is.True);
 

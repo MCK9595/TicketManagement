@@ -2,6 +2,7 @@ using TicketManagement.Contracts.Repositories;
 using TicketManagement.Contracts.Services;
 using TicketManagement.Core.Entities;
 using TicketManagement.Core.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace TicketManagement.Infrastructure.Services;
 
@@ -10,12 +11,14 @@ public class ProjectService : IProjectService
     private readonly IProjectRepository _projectRepository;
     private readonly INotificationService _notificationService;
     private readonly ICacheService _cacheService;
+    private readonly ILogger<ProjectService> _logger;
 
-    public ProjectService(IProjectRepository projectRepository, INotificationService notificationService, ICacheService cacheService)
+    public ProjectService(IProjectRepository projectRepository, INotificationService notificationService, ICacheService cacheService, ILogger<ProjectService> logger)
     {
         _projectRepository = projectRepository;
         _notificationService = notificationService;
         _cacheService = cacheService;
+        _logger = logger;
     }
 
     public async Task<Project> CreateProjectAsync(string name, string description, string createdBy)
@@ -48,9 +51,13 @@ public class ProjectService : IProjectService
 
         project.Members.Add(adminMember);
         var createdProject = await _projectRepository.AddAsync(project);
+        
+        _logger.LogInformation("Project created: {ProjectId} for user {UserId}", createdProject.Id, createdBy);
 
         // キャッシュを無効化
-        await _cacheService.RemoveAsync(CacheKeys.UserProjects(createdBy));
+        var cacheKey = CacheKeys.UserProjects(createdBy);
+        await _cacheService.RemoveAsync(cacheKey);
+        _logger.LogDebug("Invalidated cache for user {UserId}: {CacheKey}", createdBy, cacheKey);
 
         return createdProject;
     }
@@ -100,10 +107,14 @@ public class ProjectService : IProjectService
         
         if (cachedProjects != null)
         {
+            _logger.LogDebug("Returning cached projects for user {UserId}: {ProjectCount} projects", userId, cachedProjects.Count());
             return cachedProjects;
         }
 
+        _logger.LogDebug("Cache miss for user {UserId}, querying database", userId);
         var projects = await _projectRepository.GetProjectsByUserIdAsync(userId);
+        _logger.LogInformation("Retrieved {ProjectCount} projects from database for user {UserId}", projects.Count(), userId);
+        
         await _cacheService.SetAsync(cacheKey, projects, TimeSpan.FromMinutes(15));
 
         return projects;

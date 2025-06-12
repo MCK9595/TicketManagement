@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using TicketManagement.Infrastructure.Data;
 using TicketManagement.Contracts.Services;
 using TicketManagement.Contracts.Repositories;
 using TicketManagement.Infrastructure.Services;
 using TicketManagement.Infrastructure.Repositories;
-using TicketManagement.Core.Entities;
 using TicketManagement.ApiService.Hubs;
 using TicketManagement.ApiService.Services;
 using TicketManagement.ApiService.Middleware;
@@ -19,7 +19,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 
 // Add database context with Aspire SQL Server integration
-builder.AddSqlServerDbContext<TicketDbContext>("TicketDB");
+builder.AddSqlServerDbContext<TicketDbContext>("TicketDB", configureDbContextOptions: options =>
+{
+    // Query tracking behavior の最適化
+    options.UseQueryTrackingBehavior(QueryTrackingBehavior.TrackAll);
+});
 
 // Temporarily disable Redis and use in-memory cache
 builder.Services.AddDistributedMemoryCache();
@@ -56,7 +60,15 @@ builder.Services.AddAuthentication()
         options =>
         {
             options.RequireHttpsMetadata = false; // Development environment
-            options.Audience = "ticket-management-api";
+            // Temporarily disable audience validation for debugging
+            options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+            {
+                ValidateAudience = false,
+                ValidateIssuer = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ClockSkew = TimeSpan.FromMinutes(5)
+            };
             
             // SignalR configuration
             options.Events = new JwtBearerEvents
@@ -77,6 +89,18 @@ builder.Services.AddAuthentication()
                 {
                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
                     logger.LogError(context.Exception, "Authentication failed");
+                    return Task.CompletedTask;
+                },
+                OnTokenValidated = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    if (context.SecurityToken is System.IdentityModel.Tokens.Jwt.JwtSecurityToken jwt)
+                    {
+                        logger.LogDebug("Token validated. Issuer: {Issuer}, Audience: {Audience}, Claims: {Claims}",
+                            jwt.Issuer,
+                            string.Join(", ", jwt.Audiences),
+                            string.Join(", ", jwt.Claims.Select(c => $"{c.Type}={c.Value}")));
+                    }
                     return Task.CompletedTask;
                 }
             };
@@ -122,7 +146,6 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<ModelValidationFilter>();
-    options.Filters.Add<ApiResponseWrapperFilter>();
 });
 
 // Configure JSON options for security

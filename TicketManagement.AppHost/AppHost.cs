@@ -32,4 +32,12 @@ builder.AddProject<Projects.TicketManagement_Web>("webfrontend")
     .WithReference(keycloak)
     .WaitFor(apiService);
 
+// Database Initializer - only run in RunMode (not during manifest generation)
+if (builder.ExecutionContext.IsRunMode)
+{
+    builder.AddProject<Projects.TicketManagement_DbInitializer>("ticketmanagement-dbinitializer")
+        .WithReference(ticketDb)
+        .WaitFor(sqlServer);
+}
+
 builder.Build().Run();

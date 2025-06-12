@@ -29,11 +29,13 @@ public class TicketDbContext : DbContext
     {
         base.OnConfiguring(optionsBuilder);
         
-        // Lazy loading は一時的に無効（マイグレーション作成のため）
-        // optionsBuilder.UseLazyLoadingProxies();
-        
-        // Query tracking behavior の最適化
-        optionsBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.TrackAll);
+        // DbContext pooling使用時はOnConfiguringでオプションを変更できないため、
+        // Program.csでDbContextを登録する際に設定する
+        if (!optionsBuilder.IsConfigured)
+        {
+            // マイグレーション時のみ実行される設定
+            // 本番環境ではProgram.csでの設定が使用される
+        }
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

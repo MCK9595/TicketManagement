@@ -7,10 +7,12 @@ public class NotificationHubService : IAsyncDisposable
 {
     private HubConnection? _hubConnection;
     private readonly ILogger<NotificationHubService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public NotificationHubService(ILogger<NotificationHubService> logger)
+    public NotificationHubService(ILogger<NotificationHubService> logger, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
     public event Action<NotificationDto>? NotificationReceived;
@@ -18,7 +20,18 @@ public class NotificationHubService : IAsyncDisposable
 
     public async Task StartAsync(string apiBaseUrl, string? accessToken = null)
     {
-        var hubUrl = $"{apiBaseUrl.TrimEnd('/')}/hubs/notifications";
+        // Handle Aspire service discovery scheme conversion
+        var resolvedUrl = apiBaseUrl;
+        
+        // If using Aspire service discovery, replace the scheme and service name with actual URL
+        if (apiBaseUrl.StartsWith("https+http://"))
+        {
+            // In development, use the known API service URL
+            resolvedUrl = "https://localhost:7521";
+            _logger.LogInformation("Using development URL for SignalR: {ResolvedUrl}", resolvedUrl);
+        }
+        
+        var hubUrl = $"{resolvedUrl.TrimEnd('/')}/hubs/notifications";
         
         _hubConnection = new HubConnectionBuilder()
             .WithUrl(hubUrl, options =>
@@ -119,6 +132,7 @@ public class NotificationHubService : IAsyncDisposable
     }
 
     public bool IsConnected => _hubConnection?.State == HubConnectionState.Connected;
+
 
     public async ValueTask DisposeAsync()
     {

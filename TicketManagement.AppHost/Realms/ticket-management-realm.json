@@ -80,7 +80,8 @@
         "use.refresh.tokens": "true",
         "access.token.lifespan": "300",
         "client.offline.session.idle.timeout": "0",
-        "client.offline.session.max.lifespan": "0"
+        "client.offline.session.max.lifespan": "0",
+        "post.logout.redirect.uris": "https://localhost:*##http://localhost:*##https://localhost/*##http://localhost/*##https://localhost:*/Account/SignedOut##http://localhost:*/Account/SignedOut##+"
       },
       "defaultClientScopes": ["openid", "profile", "email", "roles", "web-origins"],
       "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"],
@@ -110,9 +111,19 @@
         "https://localhost:*",
         "http://localhost:*"
       ],
-      "attributes": {
-        "post.logout.redirect.uris": "https://localhost:*##http://localhost:*##https://localhost/*##http://localhost/*##https://localhost:*/Account/SignedOut##http://localhost:*/Account/SignedOut##+"
-      }
+      "protocolMappers": [
+        {
+          "name": "audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "ticket-management-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "clientId": "ticket-management-api",

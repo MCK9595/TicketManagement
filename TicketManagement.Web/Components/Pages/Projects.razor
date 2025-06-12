@@ -172,23 +172,32 @@ else
         isLoading = true;
         try
         {
+            Logger.LogInformation("Loading projects...");
             var response = await ApiClient.GetProjectsAsync();
+            Logger.LogInformation("GetProjectsAsync response: Success={Success}, Data count={DataCount}", 
+                response?.Success, response?.Data?.Count);
+            
             if (response?.Success == true && response.Data != null)
             {
                 projects = response.Data.OrderByDescending(p => p.CreatedAt).ToList();
+                Logger.LogInformation("Loaded {ProjectCount} projects successfully", projects.Count);
             }
             else
             {
-                Logger.LogWarning("Failed to load projects. Response Success: {Success}, Has Data: {HasData}", response?.Success, response?.Data != null);
+                Logger.LogWarning("Failed to load projects. Response Success: {Success}, Has Data: {HasData}, Message: {Message}", 
+                    response?.Success, response?.Data != null, response?.Message);
+                projects = new List<ProjectDto>();
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading projects");
+            projects = new List<ProjectDto>();
         }
         finally
         {
             isLoading = false;
+            StateHasChanged();
         }
     }
 
@@ -282,7 +291,11 @@ else
                 
                 if (response?.Success == true)
                 {
+                    Logger.LogInformation("Project created successfully, reloading projects list");
                     HideProjectModal();
+                    
+                    // キャッシュの問題を回避するため、少し待機してからリロード
+                    await Task.Delay(500);
                     await LoadProjects();
                 }
                 else

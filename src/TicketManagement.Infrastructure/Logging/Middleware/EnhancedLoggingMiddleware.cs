@@ -36,40 +36,109 @@ public class EnhancedLoggingMiddleware
         // リクエスト情報を記録
         await LogRequestStartAsync(context, requestId);
         
-        var originalBodyStream = context.Response.Body;
-        using var responseBody = new MemoryStream();
-        context.Response.Body = responseBody;
-
-        try
+        // For health check endpoints, skip response body buffering
+        if (IsInternalEndpoint(context.Request.Path.Value))
         {
             await _next(context);
-            
             stopwatch.Stop();
-            
-            // レスポンス情報を記録
-            await LogRequestCompletedAsync(context, requestId, stopwatch.ElapsedMilliseconds);
-            
-            // パフォーマンスログ
-            await _performanceLogService.LogApiRequestPerformanceAsync(
-                context.Request.Path.Value ?? "unknown",
-                context.Request.Method,
-                stopwatch.ElapsedMilliseconds,
-                context.Response.StatusCode);
+            return;
         }
-        catch (Exception ex)
+
+        // Only buffer response body if necessary (e.g., for specific endpoints or in development)
+        var shouldBufferResponse = ShouldBufferResponse(context);
+        
+        if (!shouldBufferResponse)
         {
-            stopwatch.Stop();
-            
-            // エラーログ
-            await LogRequestErrorAsync(context, requestId, ex, stopwatch.ElapsedMilliseconds);
-            
-            throw; // 例外を再スロー
+            try
+            {
+                await _next(context);
+                
+                stopwatch.Stop();
+                
+                // レスポンス情報を記録
+                await LogRequestCompletedAsync(context, requestId, stopwatch.ElapsedMilliseconds);
+                
+                // パフォーマンスログ
+                await _performanceLogService.LogApiRequestPerformanceAsync(
+                    context.Request.Path.Value ?? "unknown",
+                    context.Request.Method,
+                    stopwatch.ElapsedMilliseconds,
+                    context.Response.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                
+                // エラーログ
+                await LogRequestErrorAsync(context, requestId, ex, stopwatch.ElapsedMilliseconds);
+                
+                throw; // 例外を再スロー
+            }
         }
-        finally
+        else
         {
-            // レスポンスボディを元のストリームにコピー
-            await responseBody.CopyToAsync(originalBodyStream);
+            // Original buffering logic for specific cases only
+            var originalBodyStream = context.Response.Body;
+            using var responseBody = new MemoryStream();
+            context.Response.Body = responseBody;
+
+            try
+            {
+                await _next(context);
+                
+                stopwatch.Stop();
+                
+                // レスポンス情報を記録
+                await LogRequestCompletedAsync(context, requestId, stopwatch.ElapsedMilliseconds);
+                
+                // パフォーマンスログ
+                await _performanceLogService.LogApiRequestPerformanceAsync(
+                    context.Request.Path.Value ?? "unknown",
+                    context.Request.Method,
+                    stopwatch.ElapsedMilliseconds,
+                    context.Response.StatusCode);
+                
+                // Reset position and copy to original stream
+                responseBody.Seek(0, SeekOrigin.Begin);
+                await responseBody.CopyToAsync(originalBodyStream);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                
+                // エラーログ
+                await LogRequestErrorAsync(context, requestId, ex, stopwatch.ElapsedMilliseconds);
+                
+                throw; // 例外を再スロー
+            }
+            finally
+            {
+                context.Response.Body = originalBodyStream;
+            }
         }
+    }
+    
+    private bool ShouldBufferResponse(HttpContext context)
+    {
+        // Only buffer response in development or for specific debugging endpoints
+        // This avoids the Content-Length mismatch issue in production
+        // 
+        // The issue occurs because when we buffer the response:
+        // 1. We replace Response.Body with a MemoryStream
+        // 2. The response gets written to our MemoryStream
+        // 3. ASP.NET Core calculates Content-Length based on the MemoryStream
+        // 4. Headers (including Content-Length) are sent
+        // 5. We then copy the buffered content to the original stream
+        // 
+        // This causes a mismatch between the declared Content-Length and actual body size,
+        // resulting in "Unexpected end of request content" errors.
+        //
+        // To enable response body logging for specific endpoints, you can check:
+        // - context.Request.Path for specific paths
+        // - context.GetEndpoint()?.Metadata for custom attributes
+        // - Environment variables or configuration settings
+        
+        return false; // Disable response buffering by default
     }
 
     private async Task LogRequestStartAsync(HttpContext context, string requestId)
@@ -176,6 +245,18 @@ public class EnhancedLoggingMiddleware
             return;
         }
         
+        // 認証されたユーザーからの正常なリクエストはスキップ
+        if (context.User.Identity?.IsAuthenticated == true)
+        {
+            return;
+        }
+        
+        // 認証が必要なAPIエンドポイントへの未認証アクセスは正常な動作なのでスキップ
+        if (request.Path.Value?.StartsWith("/api") == true)
+        {
+            return;
+        }
+        
         // 疑わしいユーザーエージェントチェック
         var userAgent = request.Headers.UserAgent.FirstOrDefault();
         if (IsSuspiciousUserAgent(userAgent))
@@ -266,12 +347,11 @@ public class EnhancedLoggingMiddleware
     private bool IsSuspiciousUserAgent(string? userAgent)
     {
         if (string.IsNullOrEmpty(userAgent))
-            return true; // 空のユーザーエージェントは疑わしい
+            return false; // 内部サービス間通信では空の場合がある
 
         var suspiciousPatterns = new[]
         {
-            "sqlmap", "nikto", "nmap", "masscan", "zgrab",
-            "python-requests", "curl", "wget", "bot", "crawler"
+            "sqlmap", "nikto", "nmap", "masscan", "zgrab"
         };
 
         return suspiciousPatterns.Any(pattern =>

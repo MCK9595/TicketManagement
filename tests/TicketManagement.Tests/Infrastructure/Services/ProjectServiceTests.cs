@@ -22,7 +22,8 @@ public class ProjectServiceTests
         _mockProjectRepository = new Mock<IProjectRepository>();
         _mockNotificationService = new Mock<INotificationService>();
         _mockCacheService = new Mock<ICacheService>();
-        _service = new ProjectService(_mockProjectRepository.Object, _mockNotificationService.Object, _mockCacheService.Object);
+        var mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger<ProjectService>>();
+        _service = new ProjectService(_mockProjectRepository.Object, _mockNotificationService.Object, _mockCacheService.Object, mockLogger.Object);
     }
 
     [Test]
@@ -177,6 +178,10 @@ public class ProjectServiceTests
             new Project { Id = Guid.NewGuid(), Name = "Project 1", CreatedBy = "creator1", CreatedAt = DateTime.UtcNow },
             new Project { Id = Guid.NewGuid(), Name = "Project 2", CreatedBy = "creator2", CreatedAt = DateTime.UtcNow }
         };
+
+        // Setup cache miss
+        _mockCacheService.Setup(c => c.GetAsync<IEnumerable<Project>>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(null as IEnumerable<Project>);
 
         _mockProjectRepository.Setup(r => r.GetProjectsByUserIdAsync(userId))
             .ReturnsAsync(expectedProjects);

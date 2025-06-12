@@ -1,10 +1,13 @@
 ﻿@using TicketManagement.Web.Services
 @using TicketManagement.Contracts.DTOs
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authentication
 @inherits LayoutComponentBase
 @inject NotificationHubService NotificationHub
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JSRuntime
+@inject IHttpContextAccessor HttpContextAccessor
+@inject IConfiguration Configuration
 @implements IAsyncDisposable
 
 <div class="page">
@@ -87,8 +90,19 @@
     {
         try
         {
-            var apiBaseUrl = "https+http://apiservice"; // This should come from configuration
-            await NotificationHub.StartAsync(apiBaseUrl);
+            // Get API base URL from configuration or use default
+            var apiBaseUrl = Configuration["ApiService:BaseUrl"] ?? "https+http://apiservice";
+            
+            // Get access token from HttpContext
+            var httpContext = HttpContextAccessor.HttpContext;
+            var accessToken = httpContext != null ? await httpContext.GetTokenAsync("access_token") : null;
+            
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                Console.WriteLine("Warning: No access token available for SignalR connection");
+            }
+            
+            await NotificationHub.StartAsync(apiBaseUrl, accessToken);
             
             // Get initial unread count
             unreadCount = await NotificationHub.GetUnreadCountAsync();
