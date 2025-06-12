@@ -109,7 +109,10 @@
       "webOrigins": [
         "https://localhost:*",
         "http://localhost:*"
-      ]
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "https://localhost:*##http://localhost:*##https://localhost/*##http://localhost/*##https://localhost:*/Account/SignedOut##http://localhost:*/Account/SignedOut##+"
+      }
     },
     {
       "clientId": "ticket-management-api",

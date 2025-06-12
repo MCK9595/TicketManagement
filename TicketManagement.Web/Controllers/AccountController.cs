@@ -49,17 +49,14 @@ public class AccountController : Controller
 
     [HttpPost]
     [Authorize]
-    public async Task<IActionResult> Logout()
+    public IActionResult Logout()
     {
-        var callbackUrl = Url.Action("SignedOut") ?? "/";
+        var callbackUrl = Url.Action("SignedOut", "Account", null, Request.Scheme) ?? "/";
         
-        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        await HttpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, 
-            new AuthenticationProperties { RedirectUri = callbackUrl });
-        
-        return new SignOutResult(
-            new[] { CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme },
-            new AuthenticationProperties { RedirectUri = callbackUrl });
+        return SignOut(
+            new AuthenticationProperties { RedirectUri = callbackUrl },
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            OpenIdConnectDefaults.AuthenticationScheme);
     }
 
     [HttpGet]

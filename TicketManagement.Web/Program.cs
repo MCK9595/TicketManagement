@@ -77,6 +77,17 @@ builder.Services.AddAuthentication(oidcScheme)
                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
                     logger.LogError(context.Exception, "Authentication failed: {Error}", context.Exception.Message);
                     return Task.CompletedTask;
+                },
+                OnRedirectToIdentityProviderForSignOut = context =>
+                {
+                    var request = context.Request;
+                    var logoutRedirectUri = $"{request.Scheme}://{request.Host}/Account/SignedOut";
+                    context.ProtocolMessage.PostLogoutRedirectUri = logoutRedirectUri;
+                    
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                    logger.LogInformation("Setting PostLogoutRedirectUri to: {RedirectUri}", logoutRedirectUri);
+                    
+                    return Task.CompletedTask;
                 }
             };
         })
