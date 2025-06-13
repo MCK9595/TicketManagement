@@ -14,6 +14,9 @@ public interface ITicketRepository : IRepository<Ticket, Guid>
     Task<Ticket?> GetTicketWithHistoryAsync(Guid ticketId);
     Task<PagedResult<Ticket>> SearchTicketsAsync(Guid projectId, TicketSearchCriteria criteria, int page, int pageSize);
     Task<IEnumerable<Ticket>> GetRecentTicketsAsync(string userId, int count = 10);
+    Task<Ticket?> GetByIdAsyncNoTracking(Guid id);
+    Task<Ticket?> GetByIdAsyncSimple(Guid id);
+    Task<Ticket> UpdateStatusAsync(Guid ticketId, TicketStatus newStatus, string updatedBy);
 }
 
 public class PagedResult<T>

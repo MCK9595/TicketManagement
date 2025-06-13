@@ -142,7 +142,9 @@ public class TicketService : ITicketService
 
     public async Task<Ticket> UpdateTicketStatusAsync(Guid ticketId, TicketStatus newStatus, string updatedBy)
     {
-        var ticket = await _ticketRepository.GetByIdAsync(ticketId);
+        // Get ticket without includes to avoid tracking issues
+        var ticket = await _ticketRepository.GetByIdAsyncNoTracking(ticketId);
+        
         if (ticket == null)
         {
             throw new ArgumentException($"Ticket with ID {ticketId} not found.", nameof(ticketId));
@@ -154,18 +156,9 @@ public class TicketService : ITicketService
         }
 
         var oldStatus = ticket.Status;
-        ticket.UpdateStatus(newStatus, updatedBy);
-
-        var updatedTicket = await _ticketRepository.UpdateAsync(ticket);
-
-        // 履歴記録
-        await _historyRepository.AddHistoryAsync(
-            ticketId, 
-            updatedBy, 
-            "Status", 
-            oldStatus.ToString(), 
-            newStatus.ToString(), 
-            HistoryActionType.StatusChanged);
+        
+        // Use the dedicated status update method (includes automatic history tracking)
+        var updatedTicket = await _ticketRepository.UpdateStatusAsync(ticketId, newStatus, updatedBy);
 
         // 担当者に通知
         var assignments = await _assignmentRepository.GetAssignmentsByTicketIdAsync(ticketId);

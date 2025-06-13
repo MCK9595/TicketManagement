@@ -185,4 +185,121 @@ public class TicketRepository : Repository<Ticket, Guid>, ITicketRepository
             .Include(t => t.Histories)
             .FirstOrDefaultAsync(t => t.Id == id);
     }
+
+    public async Task<Ticket?> GetByIdAsyncNoTracking(Guid id)
+    {
+        return await _context.Tickets
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == id);
+    }
+
+    public async Task<Ticket?> GetByIdAsyncSimple(Guid id)
+    {
+        return await _context.Tickets
+            .FirstOrDefaultAsync(t => t.Id == id);
+    }
+
+    public override async Task<Ticket> UpdateAsync(Ticket entity)
+    {
+        try
+        {
+            // Find the existing entity in the database
+            var existingEntity = await _context.Tickets.FindAsync(entity.Id);
+            
+            if (existingEntity == null)
+            {
+                throw new InvalidOperationException($"Ticket with ID {entity.Id} not found in database");
+            }
+
+            // Update the existing entity with new values
+            _context.Entry(existingEntity).CurrentValues.SetValues(entity);
+            
+            // Save changes
+            await _context.SaveChangesAsync();
+            
+            return existingEntity;
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // Log the error and rethrow
+            throw new InvalidOperationException($"Concurrency error updating ticket {entity.Id}", ex);
+        }
+    }
+
+    public async Task<Ticket> UpdateStatusAsync(Guid ticketId, TicketStatus newStatus, string updatedBy)
+    {
+        const int maxRetries = 3;
+        var retryCount = 0;
+
+        while (retryCount < maxRetries)
+        {
+            try
+            {
+                // Load ticket to check current status
+                var ticket = await _context.Tickets
+                    .Where(t => t.Id == ticketId)
+                    .FirstOrDefaultAsync();
+
+                if (ticket == null)
+                {
+                    throw new InvalidOperationException($"Ticket with ID {ticketId} not found");
+                }
+
+                var currentStatus = ticket.Status;
+                var currentUpdatedAt = ticket.UpdatedAt;
+                var now = DateTime.UtcNow;
+
+                // Use raw SQL to update with optimistic concurrency check on status and UpdatedAt
+                var affectedRows = await _context.Database.ExecuteSqlRawAsync(@"
+                    UPDATE Tickets 
+                    SET Status = {0}, UpdatedBy = {1}, UpdatedAt = {2}
+                    WHERE Id = {3} AND Status = {4} AND (UpdatedAt = {5} OR UpdatedAt IS NULL)",
+                    (int)newStatus, updatedBy, now, ticketId, (int)currentStatus, currentUpdatedAt);
+
+                if (affectedRows == 0)
+                {
+                    if (retryCount < maxRetries - 1)
+                    {
+                        retryCount++;
+                        await Task.Delay(100 * retryCount);
+                        continue;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Ticket status has been modified by another user. Please refresh and try again.");
+                    }
+                }
+
+                // Add history entry
+                var historyEntry = new TicketHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TicketId = ticketId,
+                    FieldName = "Status",
+                    OldValue = currentStatus.ToString(),
+                    NewValue = newStatus.ToString(),
+                    ChangedBy = updatedBy,
+                    ChangedAt = now,
+                    ActionType = HistoryActionType.Updated
+                };
+
+                _context.TicketHistories.Add(historyEntry);
+                await _context.SaveChangesAsync();
+
+                // Return updated ticket
+                ticket.Status = newStatus;
+                ticket.UpdatedBy = updatedBy;
+                ticket.UpdatedAt = now;
+                return ticket;
+            }
+            catch (Exception ex) when (!(ex is InvalidOperationException) && retryCount < maxRetries - 1)
+            {
+                retryCount++;
+                _context.ChangeTracker.Clear();
+                await Task.Delay(100 * retryCount);
+            }
+        }
+
+        throw new InvalidOperationException($"Unable to update ticket status after {maxRetries} attempts due to concurrency conflicts. Please try again.");
+    }
 }

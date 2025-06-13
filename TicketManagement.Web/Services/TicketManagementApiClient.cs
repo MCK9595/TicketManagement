@@ -271,7 +271,7 @@ public class TicketManagementApiClient
     {
         try
         {
-            var response = await _httpClient.PatchAsJsonAsync($"api/tickets/{ticketId}/status", statusUpdate);
+            var response = await _httpClient.PutAsJsonAsync($"api/tickets/{ticketId}/status", statusUpdate);
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
@@ -290,7 +290,7 @@ public class TicketManagementApiClient
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"api/tickets/{ticketId}/comments", createComment);
+            var response = await _httpClient.PostAsJsonAsync($"api/comments/ticket/{ticketId}", createComment);
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();

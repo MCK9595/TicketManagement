@@ -26,7 +26,11 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
             .HasConversion(
                 v => string.Join(',', v),
                 v => v.Split(',', StringSplitOptions.RemoveEmptyEntries))
-            .HasMaxLength(500);
+            .HasMaxLength(500)
+            .Metadata.SetValueComparer(new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<string[]>(
+                (c1, c2) => (c1 == null && c2 == null) || (c1 != null && c2 != null && c1.SequenceEqual(c2)),
+                c => c == null ? 0 : c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
+                c => c == null ? Array.Empty<string>() : c.ToArray()));
 
         builder.Property(t => t.CreatedBy)
             .IsRequired()

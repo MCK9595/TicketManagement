@@ -3,21 +3,27 @@ using TicketManagement.Infrastructure.Data;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// Add service defaults & SQL Server database
+// Add service defaults & configuration
 builder.AddServiceDefaults();
-builder.AddSqlServerDbContext<TicketDbContext>("TicketDB");
+
+// Add connection string for migration
+var connectionString = builder.Configuration.GetConnectionString("TicketDB");
 
 var host = builder.Build();
 
 // マイグレーションを実行
 try
 {
-    using var scope = host.Services.CreateScope();
-    var dbContext = scope.ServiceProvider.GetRequiredService<TicketDbContext>();
-    
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var logger = host.Services.GetRequiredService<ILogger<Program>>();
     logger.LogInformation("Starting database migration...");
     
+    // Create DbContext with custom options to suppress warnings
+    var optionsBuilder = new DbContextOptionsBuilder<TicketDbContext>();
+    optionsBuilder.UseSqlServer(connectionString);
+    optionsBuilder.ConfigureWarnings(warnings =>
+        warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+    
+    using var dbContext = new TicketDbContext(optionsBuilder.Options);
     await dbContext.Database.MigrateAsync();
     
     logger.LogInformation("Database migration completed successfully.");

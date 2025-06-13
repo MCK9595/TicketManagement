@@ -29,12 +29,12 @@ public class TicketDbContext : DbContext
     {
         base.OnConfiguring(optionsBuilder);
         
-        // DbContext pooling使用時はOnConfiguringでオプションを変更できないため、
-        // Program.csでDbContextを登録する際に設定する
+        // Only configure if options are not already configured (for migrations)
         if (!optionsBuilder.IsConfigured)
         {
-            // マイグレーション時のみ実行される設定
-            // 本番環境ではProgram.csでの設定が使用される
+            // Suppress PendingModelChangesWarning for DbInitializer
+            optionsBuilder.ConfigureWarnings(warnings =>
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         }
     }
 

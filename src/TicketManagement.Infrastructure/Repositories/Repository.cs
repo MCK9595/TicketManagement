@@ -34,8 +34,22 @@ public class Repository<TEntity, TKey> : IRepository<TEntity, TKey> where TEntit
 
     public virtual async Task<TEntity> UpdateAsync(TEntity entity)
     {
-        _dbSet.Update(entity);
-        await _context.SaveChangesAsync();
+        // Detach any existing tracked entities with the same key
+        var existingEntry = _context.ChangeTracker.Entries<TEntity>()
+            .FirstOrDefault(e => e.Entity == entity);
+        
+        if (existingEntry != null)
+        {
+            // Entity is already being tracked, just save changes
+            await _context.SaveChangesAsync();
+        }
+        else
+        {
+            // Entity is not tracked, update it
+            _dbSet.Update(entity);
+            await _context.SaveChangesAsync();
+        }
+        
         return entity;
     }
 

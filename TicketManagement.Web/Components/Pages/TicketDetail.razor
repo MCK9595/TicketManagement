@@ -3,7 +3,9 @@
 @using TicketManagement.Contracts.DTOs
 @inject TicketManagementApiClient ApiClient
 @inject NavigationManager Navigation
+@inject ILogger<TicketDetail> Logger
 @attribute [Authorize]
+@rendermode InteractiveServer
 
 <PageTitle>@(ticket?.Title ?? "Ticket") - Ticket Management</PageTitle>
 
@@ -106,16 +108,16 @@ else if (ticket != null)
             <!-- Comments Section -->
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Comments (@(comments?.Count ?? 0))</h5>
+                    <h5 class="mb-0">Comments (@(ticket?.Comments?.Count ?? 0))</h5>
                     <button class="btn btn-primary btn-sm" @onclick="ShowAddCommentModal">
                         <span class="bi bi-chat-left-text" aria-hidden="true"></span> Add Comment
                     </button>
                 </div>
                 <div class="card-body">
-                    @if (comments?.Any() == true)
+                    @if (ticket?.Comments?.Any() == true)
                     {
                         <div class="timeline">
-                            @foreach (var comment in comments.OrderBy(c => c.CreatedAt))
+                            @foreach (var comment in ticket.Comments.OrderBy(c => c.CreatedAt))
                             {
                                 <div class="timeline-item mb-4">
                                     <div class="d-flex">
@@ -164,10 +166,10 @@ else if (ticket != null)
                         <button class="btn btn-outline-primary" @onclick="ShowEditTicketModal">
                             <span class="bi bi-pencil" aria-hidden="true"></span> Edit Ticket
                         </button>
-                        <button class="btn btn-outline-info" disabled>
+                        <button class="btn btn-outline-info" @onclick="ShowChangeStatusModal">
                             <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Change Status
                         </button>
-                        <button class="btn btn-outline-warning" disabled>
+                        <button class="btn btn-outline-warning" @onclick="ShowChangePriorityModal">
                             <span class="bi bi-exclamation-triangle" aria-hidden="true"></span> Change Priority
                         </button>
                         <button class="btn btn-outline-success" @onclick="ShowAddCommentModal">
@@ -185,18 +187,18 @@ else if (ticket != null)
                 <div class="card-body">
                     <div class="row text-center">
                         <div class="col-6">
-                            <h6 class="text-primary">@(comments?.Count ?? 0)</h6>
+                            <h6 class="text-primary">@(ticket?.Comments?.Count ?? 0)</h6>
                             <small class="text-muted">Comments</small>
                         </div>
                         <div class="col-6">
-                            <h6 class="text-info">@(ticket.Assignments?.Count ?? 0)</h6>
+                            <h6 class="text-info">@(ticket?.Assignments?.Count ?? 0)</h6>
                             <small class="text-muted">Assignees</small>
                         </div>
                     </div>
                     <hr>
                     <div class="text-center">
                         <small class="text-muted">
-                            Created @ticket.CreatedAt.ToShortDateString()
+                            Created @ticket?.CreatedAt.ToShortDateString()
                         </small>
                     </div>
                 </div>
@@ -217,129 +219,219 @@ else
 }
 
 <!-- Edit Ticket Modal -->
-<div class="modal fade @(showEditTicketModal ? "show" : "")" style="display: @(showEditTicketModal ? "block" : "none")" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Edit Ticket</h5>
-                <button type="button" class="btn-close" @onclick="HideEditTicketModal"></button>
-            </div>
-            <div class="modal-body">
-                <EditForm Model="editTicketForm" OnValidSubmit="UpdateTicket">
-                    <DataAnnotationsValidator />
-                    <ValidationSummary class="text-danger" />
+@if (showEditTicketModal)
+{
+    <div class="modal fade show" style="display: block; background-color: rgba(0,0,0,0.5);" tabindex="-1" @onclick="HandleEditModalBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Ticket</h5>
+                    <button type="button" class="btn-close" @onclick="HideEditTicketModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="editTicketForm" OnValidSubmit="UpdateTicket">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
 
-                    <div class="mb-3">
-                        <label for="editTicketTitle" class="form-label">Title</label>
-                        <InputText id="editTicketTitle" class="form-control" @bind-Value="editTicketForm.Title" />
-                        <ValidationMessage For="@(() => editTicketForm.Title)" />
-                    </div>
+                        <div class="mb-3">
+                            <label for="editTicketTitle" class="form-label">Title</label>
+                            <InputText id="editTicketTitle" class="form-control" @bind-Value="editTicketForm.Title" />
+                            <ValidationMessage For="@(() => editTicketForm.Title)" />
+                        </div>
 
-                    <div class="mb-3">
-                        <label for="editTicketDescription" class="form-label">Description</label>
-                        <InputTextArea id="editTicketDescription" class="form-control" rows="4" @bind-Value="editTicketForm.Description" />
-                    </div>
+                        <div class="mb-3">
+                            <label for="editTicketDescription" class="form-label">Description</label>
+                            <InputTextArea id="editTicketDescription" class="form-control" rows="4" @bind-Value="editTicketForm.Description" />
+                        </div>
 
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editTicketStatus" class="form-label">Status</label>
-                                <InputSelect id="editTicketStatus" class="form-select" @bind-Value="editTicketForm.Status">
-                                    <option value="Open">Open</option>
-                                    <option value="InProgress">In Progress</option>
-                                    <option value="Review">Review</option>
-                                    <option value="Closed">Closed</option>
-                                    <option value="OnHold">On Hold</option>
-                                </InputSelect>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="editTicketStatus" class="form-label">Status</label>
+                                    <InputSelect id="editTicketStatus" class="form-select" @bind-Value="editTicketForm.Status">
+                                        <option value="Open">Open</option>
+                                        <option value="InProgress">In Progress</option>
+                                        <option value="Review">Review</option>
+                                        <option value="Closed">Closed</option>
+                                        <option value="OnHold">On Hold</option>
+                                    </InputSelect>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="editTicketPriority" class="form-label">Priority</label>
+                                    <InputSelect id="editTicketPriority" class="form-select" @bind-Value="editTicketForm.Priority">
+                                        <option value="Low">Low</option>
+                                        <option value="Medium">Medium</option>
+                                        <option value="High">High</option>
+                                        <option value="Critical">Critical</option>
+                                    </InputSelect>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="editTicketPriority" class="form-label">Priority</label>
-                                <InputSelect id="editTicketPriority" class="form-select" @bind-Value="editTicketForm.Priority">
-                                    <option value="Low">Low</option>
-                                    <option value="Medium">Medium</option>
-                                    <option value="High">High</option>
-                                    <option value="Critical">Critical</option>
-                                </InputSelect>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" @onclick="HideEditTicketModal">Cancel</button>
-                        <button type="submit" class="btn btn-primary" disabled="@isUpdatingTicket">
-                            @if (isUpdatingTicket)
-                            {
-                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                            }
-                            Update Ticket
-                        </button>
-                    </div>
-                </EditForm>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="HideEditTicketModal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@isUpdatingTicket">
+                                @if (isUpdatingTicket)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                Update Ticket
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
             </div>
         </div>
     </div>
-</div>
+}
 
 <!-- Add Comment Modal -->
-<div class="modal fade @(showAddCommentModal ? "show" : "")" style="display: @(showAddCommentModal ? "block" : "none")" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Add Comment</h5>
-                <button type="button" class="btn-close" @onclick="HideAddCommentModal"></button>
-            </div>
-            <div class="modal-body">
-                <EditForm Model="addCommentForm" OnValidSubmit="AddComment">
-                    <DataAnnotationsValidator />
-                    <ValidationSummary class="text-danger" />
+@if (showAddCommentModal)
+{
+    <div class="modal fade show" style="display: block; background-color: rgba(0,0,0,0.5);" tabindex="-1" @onclick="HandleCommentModalBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Comment</h5>
+                    <button type="button" class="btn-close" @onclick="HideAddCommentModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="addCommentForm" OnValidSubmit="AddComment">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
 
-                    <div class="mb-3">
-                        <label for="commentContent" class="form-label">Comment</label>
-                        <InputTextArea id="commentContent" class="form-control" rows="4" @bind-Value="addCommentForm.Content" placeholder="Enter your comment..." />
-                        <ValidationMessage For="@(() => addCommentForm.Content)" />
-                    </div>
+                        <div class="mb-3">
+                            <label for="commentContent" class="form-label">Comment</label>
+                            <InputTextArea id="commentContent" class="form-control" rows="4" @bind-Value="addCommentForm.Content" placeholder="Enter your comment..." />
+                            <ValidationMessage For="@(() => addCommentForm.Content)" />
+                        </div>
 
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" @onclick="HideAddCommentModal">Cancel</button>
-                        <button type="submit" class="btn btn-primary" disabled="@isAddingComment">
-                            @if (isAddingComment)
-                            {
-                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                            }
-                            Add Comment
-                        </button>
-                    </div>
-                </EditForm>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="HideAddCommentModal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@isAddingComment">
+                                @if (isAddingComment)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                Add Comment
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
             </div>
         </div>
     </div>
-</div>
+}
 
-@if (showEditTicketModal || showAddCommentModal)
+<!-- Change Status Modal -->
+@if (showChangeStatusModal)
 {
-    <div class="modal-backdrop fade show"></div>
+    <div class="modal fade show" style="display: block; background-color: rgba(0,0,0,0.5);" tabindex="-1" @onclick="HandleStatusModalBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Status</h5>
+                    <button type="button" class="btn-close" @onclick="HideChangeStatusModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="changeStatusForm" OnValidSubmit="ChangeStatus">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label for="newStatus" class="form-label">New Status</label>
+                            <InputSelect id="newStatus" class="form-select" @bind-Value="changeStatusForm.Status">
+                                <option value="Open">Open</option>
+                                <option value="InProgress">In Progress</option>
+                                <option value="Review">Review</option>
+                                <option value="Closed">Closed</option>
+                                <option value="OnHold">On Hold</option>
+                            </InputSelect>
+                        </div>
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="HideChangeStatusModal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@isChangingStatus">
+                                @if (isChangingStatus)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                Change Status
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Change Priority Modal -->
+@if (showChangePriorityModal)
+{
+    <div class="modal fade show" style="display: block; background-color: rgba(0,0,0,0.5);" tabindex="-1" @onclick="HandlePriorityModalBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Priority</h5>
+                    <button type="button" class="btn-close" @onclick="HideChangePriorityModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="changePriorityForm" OnValidSubmit="ChangePriority">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label for="newPriority" class="form-label">New Priority</label>
+                            <InputSelect id="newPriority" class="form-select" @bind-Value="changePriorityForm.Priority">
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Critical">Critical</option>
+                            </InputSelect>
+                        </div>
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="HideChangePriorityModal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@isChangingPriority">
+                                @if (isChangingPriority)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                Change Priority
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
 }
 
 @code {
     [Parameter] public Guid TicketId { get; set; }
 
-    private TicketDto? ticket;
-    private List<CommentDto>? comments;
+    private TicketDetailDto? ticket;
     private bool isLoading = true;
     private bool showEditTicketModal = false;
     private bool showAddCommentModal = false;
+    private bool showChangeStatusModal = false;
+    private bool showChangePriorityModal = false;
     private bool isUpdatingTicket = false;
     private bool isAddingComment = false;
+    private bool isChangingStatus = false;
+    private bool isChangingPriority = false;
 
     private EditTicketFormModel editTicketForm = new();
     private AddCommentFormModel addCommentForm = new();
+    private ChangeStatusFormModel changeStatusForm = new();
+    private ChangePriorityFormModel changePriorityForm = new();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadTicket();
-        await LoadComments();
     }
 
     private async Task LoadTicket()
@@ -354,7 +446,7 @@ else
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading ticket: {ex.Message}");
+            Logger.LogError(ex, "Error loading ticket {TicketId}", TicketId);
         }
         finally
         {
@@ -362,21 +454,6 @@ else
         }
     }
 
-    private async Task LoadComments()
-    {
-        try
-        {
-            var response = await ApiClient.GetTicketCommentsAsync(TicketId);
-            if (response?.Success == true && response.Data != null)
-            {
-                comments = response.Data.OrderByDescending(c => c.CreatedAt).ToList();
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error loading comments: {ex.Message}");
-        }
-    }
 
     private void ShowEditTicketModal()
     {
@@ -435,7 +512,7 @@ else
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error updating ticket: {ex.Message}");
+            Logger.LogError(ex, "Error updating ticket {TicketId}", TicketId);
         }
         finally
         {
@@ -457,12 +534,12 @@ else
             if (response?.Success == true)
             {
                 HideAddCommentModal();
-                await LoadComments();
+                await LoadTicket();
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error adding comment: {ex.Message}");
+            Logger.LogError(ex, "Error adding comment to ticket {TicketId}", TicketId);
         }
         finally
         {
@@ -495,6 +572,136 @@ else
         };
     }
 
+    private void HandleEditModalBackdropClick()
+    {
+        HideEditTicketModal();
+    }
+
+    private void HandleCommentModalBackdropClick()
+    {
+        HideAddCommentModal();
+    }
+
+    private void ShowChangeStatusModal()
+    {
+        if (ticket != null)
+        {
+            changeStatusForm = new ChangeStatusFormModel
+            {
+                Status = ticket.Status.ToString()
+            };
+            showChangeStatusModal = true;
+            Logger.LogInformation("ShowChangeStatusModal: Current status = {CurrentStatus}", ticket.Status);
+        }
+    }
+
+    private void HideChangeStatusModal()
+    {
+        showChangeStatusModal = false;
+        changeStatusForm = new ChangeStatusFormModel();
+    }
+
+    private void HandleStatusModalBackdropClick()
+    {
+        HideChangeStatusModal();
+    }
+
+    private async Task ChangeStatus()
+    {
+        if (ticket == null) return;
+
+        isChangingStatus = true;
+        try
+        {
+            Logger.LogInformation("ChangeStatus: Attempting to change status from {OldStatus} to {NewStatus}", 
+                ticket.Status, changeStatusForm.Status);
+
+            var updateDto = new UpdateTicketStatusDto
+            {
+                Status = Enum.Parse<TicketManagement.Core.Enums.TicketStatus>(changeStatusForm.Status)
+            };
+
+            var response = await ApiClient.UpdateTicketStatusAsync(TicketId, updateDto);
+            Logger.LogInformation("ChangeStatus API response: Success = {Success}, Message = {Message}", 
+                response?.Success, response?.Message);
+
+            if (response?.Success == true)
+            {
+                Logger.LogInformation("Status changed successfully, reloading ticket");
+                HideChangeStatusModal();
+                await LoadTicket();
+            }
+            else
+            {
+                Logger.LogWarning("Status change failed: {Message}", response?.Message ?? "Unknown error");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error changing status for ticket {TicketId} from {OldStatus} to {NewStatus}", 
+                TicketId, ticket.Status, changeStatusForm.Status);
+        }
+        finally
+        {
+            isChangingStatus = false;
+        }
+    }
+
+    private void ShowChangePriorityModal()
+    {
+        if (ticket != null)
+        {
+            changePriorityForm = new ChangePriorityFormModel
+            {
+                Priority = ticket.Priority.ToString()
+            };
+            showChangePriorityModal = true;
+        }
+    }
+
+    private void HideChangePriorityModal()
+    {
+        showChangePriorityModal = false;
+        changePriorityForm = new ChangePriorityFormModel();
+    }
+
+    private void HandlePriorityModalBackdropClick()
+    {
+        HideChangePriorityModal();
+    }
+
+    private async Task ChangePriority()
+    {
+        if (ticket == null) return;
+
+        isChangingPriority = true;
+        try
+        {
+            var updateDto = new UpdateTicketDto
+            {
+                Title = ticket.Title,
+                Description = ticket.Description,
+                Status = ticket.Status,
+                Priority = Enum.Parse<TicketManagement.Core.Enums.TicketPriority>(changePriorityForm.Priority)
+            };
+
+            var response = await ApiClient.UpdateTicketAsync(TicketId, updateDto);
+            if (response?.Success == true)
+            {
+                HideChangePriorityModal();
+                await LoadTicket();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error changing priority for ticket {TicketId}", TicketId);
+        }
+        finally
+        {
+            isChangingPriority = false;
+        }
+    }
+
     private class EditTicketFormModel
     {
         [Required]
@@ -514,5 +721,15 @@ else
         [Required]
         [StringLength(2000, MinimumLength = 1)]
         public string Content { get; set; } = string.Empty;
+    }
+
+    private class ChangeStatusFormModel
+    {
+        public string Status { get; set; } = "Open";
+    }
+
+    private class ChangePriorityFormModel
+    {
+        public string Priority { get; set; } = "Medium";
     }
 }
