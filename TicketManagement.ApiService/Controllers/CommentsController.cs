@@ -67,8 +67,7 @@ public class CommentsController : ControllerBase
                 TicketTitle = comment.Ticket?.Title ?? ""
             };
 
-            return CreatedAtAction(nameof(GetComment), new { id = comment.Id }, 
-                ApiResponseDto<CommentDto>.SuccessResult(commentDto, "Comment added successfully"));
+            return ApiResponseDto<CommentDto>.SuccessResult(commentDto, "Comment added successfully");
         }
         catch (ArgumentException ex)
         {
@@ -121,7 +120,7 @@ public class CommentsController : ControllerBase
                 TicketTitle = targetComment.Ticket?.Title ?? ""
             };
 
-            return Ok(ApiResponseDto<CommentDto>.SuccessResult(commentDto));
+            return ApiResponseDto<CommentDto>.SuccessResult(commentDto);
         }
         catch (Exception ex)
         {
@@ -164,7 +163,7 @@ public class CommentsController : ControllerBase
                 TicketTitle = comment.Ticket?.Title ?? ""
             };
 
-            return Ok(ApiResponseDto<CommentDto>.SuccessResult(commentDto, "Comment updated successfully"));
+            return ApiResponseDto<CommentDto>.SuccessResult(commentDto, "Comment updated successfully");
         }
         catch (ArgumentException ex)
         {
@@ -192,7 +191,7 @@ public class CommentsController : ControllerBase
             var userId = GetCurrentUserId();
             await _ticketService.DeleteCommentAsync(id, userId);
 
-            return Ok(ApiResponseDto<string>.SuccessResult("success", "Comment deleted successfully"));
+            return ApiResponseDto<string>.SuccessResult("success", "Comment deleted successfully");
         }
         catch (ArgumentException ex)
         {

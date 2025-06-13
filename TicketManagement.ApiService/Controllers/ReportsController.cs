@@ -49,7 +49,7 @@ public class ReportsController : ControllerBase
             }
 
             var summary = await _reportService.GetProjectSummaryAsync(projectId);
-            return Ok(ApiResponseDto<ProjectSummaryReportDto>.SuccessResult(summary));
+            return ApiResponseDto<ProjectSummaryReportDto>.SuccessResult(summary);
         }
         catch (ArgumentException ex)
         {
@@ -80,7 +80,7 @@ public class ReportsController : ControllerBase
             }
 
             var burndown = await _reportService.GetBurndownChartAsync(projectId, period);
-            return Ok(ApiResponseDto<BurndownChartDto>.SuccessResult(burndown));
+            return ApiResponseDto<BurndownChartDto>.SuccessResult(burndown);
         }
         catch (ArgumentException ex)
         {
@@ -109,7 +109,7 @@ public class ReportsController : ControllerBase
             }
 
             var statistics = await _reportService.GetProjectStatisticsAsync(projectId);
-            return Ok(ApiResponseDto<ProjectStatisticsDto>.SuccessResult(statistics));
+            return ApiResponseDto<ProjectStatisticsDto>.SuccessResult(statistics);
         }
         catch (ArgumentException ex)
         {
@@ -154,7 +154,7 @@ public class ReportsController : ControllerBase
             }
 
             var comparison = await _reportService.GetProjectsComparisonAsync(accessibleProjects);
-            return Ok(ApiResponseDto<List<ProjectSummaryReportDto>>.SuccessResult(comparison));
+            return ApiResponseDto<List<ProjectSummaryReportDto>>.SuccessResult(comparison);
         }
         catch (Exception ex)
         {
@@ -174,7 +174,7 @@ public class ReportsController : ControllerBase
         {
             var userId = GetCurrentUserId();
             var report = await _reportService.GetUserProductivityReportAsync(userId, period);
-            return Ok(ApiResponseDto<Dictionary<string, object>>.SuccessResult(report));
+            return ApiResponseDto<Dictionary<string, object>>.SuccessResult(report);
         }
         catch (Exception ex)
         {
@@ -195,7 +195,7 @@ public class ReportsController : ControllerBase
         try
         {
             var report = await _reportService.GetUserProductivityReportAsync(targetUserId, period);
-            return Ok(ApiResponseDto<Dictionary<string, object>>.SuccessResult(report));
+            return ApiResponseDto<Dictionary<string, object>>.SuccessResult(report);
         }
         catch (Exception ex)
         {
@@ -247,7 +247,7 @@ public class ReportsController : ControllerBase
             var userProductivity = await _reportService.GetUserProductivityReportAsync(userId, new ReportPeriodDto { Days = 7 });
             dashboardData["UserProductivity"] = userProductivity;
 
-            return Ok(ApiResponseDto<Dictionary<string, object>>.SuccessResult(dashboardData));
+            return ApiResponseDto<Dictionary<string, object>>.SuccessResult(dashboardData);
         }
         catch (Exception ex)
         {

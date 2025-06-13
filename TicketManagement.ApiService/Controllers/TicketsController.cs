@@ -101,7 +101,7 @@ public class TicketsController : ControllerBase
                 PageSize = result.PageSize
             };
 
-            return Ok(ApiResponseDto<PagedResultDto<TicketDto>>.SuccessResult(pagedResult));
+            return ApiResponseDto<PagedResultDto<TicketDto>>.SuccessResult(pagedResult);
         }
         catch (Exception ex)
         {
@@ -178,7 +178,7 @@ public class TicketsController : ControllerBase
                 }).ToList() ?? new List<TicketHistoryDto>()
             };
 
-            return Ok(ApiResponseDto<TicketDetailDto>.SuccessResult(ticketDetailDto));
+            return ApiResponseDto<TicketDetailDto>.SuccessResult(ticketDetailDto);
         }
         catch (Exception ex)
         {
@@ -243,8 +243,7 @@ public class TicketsController : ControllerBase
                 ProjectName = ticket.Project?.Name ?? ""
             };
 
-            return CreatedAtAction(nameof(GetTicket), new { id = ticket.Id }, 
-                ApiResponseDto<TicketDto>.SuccessResult(ticketDto, "Ticket created successfully"));
+            return ApiResponseDto<TicketDto>.SuccessResult(ticketDto, "Ticket created successfully");
         }
         catch (Exception ex)
         {
@@ -316,7 +315,7 @@ public class TicketsController : ControllerBase
                 ProjectName = ticket.Project?.Name ?? ""
             };
 
-            return Ok(ApiResponseDto<TicketDto>.SuccessResult(ticketDto, "Ticket updated successfully"));
+            return ApiResponseDto<TicketDto>.SuccessResult(ticketDto, "Ticket updated successfully");
         }
         catch (ArgumentException ex)
         {
@@ -384,7 +383,7 @@ public class TicketsController : ControllerBase
                 ProjectName = ticket.Project?.Name ?? ""
             };
 
-            return Ok(ApiResponseDto<TicketDto>.SuccessResult(ticketDto, "Ticket status updated successfully"));
+            return ApiResponseDto<TicketDto>.SuccessResult(ticketDto, "Ticket status updated successfully");
         }
         catch (ArgumentException ex)
         {
@@ -445,7 +444,7 @@ public class TicketsController : ControllerBase
                 AssignedBy = assignment.AssignedBy
             };
 
-            return Ok(ApiResponseDto<TicketAssignmentDto>.SuccessResult(assignmentDto, "Ticket assigned successfully"));
+            return ApiResponseDto<TicketAssignmentDto>.SuccessResult(assignmentDto, "Ticket assigned successfully");
         }
         catch (ArgumentException ex)
         {
@@ -480,7 +479,7 @@ public class TicketsController : ControllerBase
 
             await _ticketService.RemoveTicketAssignmentAsync(id, assigneeId, userId);
 
-            return Ok(ApiResponseDto<string>.SuccessResult("success", "Assignment removed successfully"));
+            return ApiResponseDto<string>.SuccessResult("success", "Assignment removed successfully");
         }
         catch (ArgumentException ex)
         {
@@ -531,7 +530,7 @@ public class TicketsController : ControllerBase
                 ProjectName = t.Project?.Name ?? ""
             }).ToList();
 
-            return Ok(ApiResponseDto<List<TicketDto>>.SuccessResult(ticketDtos));
+            return ApiResponseDto<List<TicketDto>>.SuccessResult(ticketDtos);
         }
         catch (Exception ex)
         {
@@ -578,7 +577,7 @@ public class TicketsController : ControllerBase
                 ProjectName = t.Project?.Name ?? ""
             }).ToList();
 
-            return Ok(ApiResponseDto<List<TicketDto>>.SuccessResult(ticketDtos));
+            return ApiResponseDto<List<TicketDto>>.SuccessResult(ticketDtos);
         }
         catch (Exception ex)
         {
@@ -605,7 +604,7 @@ public class TicketsController : ControllerBase
 
             await _ticketService.DeleteTicketAsync(id, userId);
 
-            return Ok(ApiResponseDto<string>.SuccessResult("success", "Ticket deleted successfully"));
+            return ApiResponseDto<string>.SuccessResult("success", "Ticket deleted successfully");
         }
         catch (ArgumentException ex)
         {

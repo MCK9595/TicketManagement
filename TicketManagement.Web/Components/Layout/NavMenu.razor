@@ -28,7 +28,7 @@
 
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="tickets">
-                <span class="bi bi-clipboard-data-fill" aria-hidden="true"></span> My Tickets
+                <span class="bi bi-list-task" aria-hidden="true"></span> My Tickets
             </NavLink>
         </div>
 
@@ -38,14 +38,14 @@
                 Notifications
                 @if (unreadCount > 0)
                 {
-                    <span class="badge bg-danger ms-2">@unreadCount</span>
+                    <span class="notification-badge">@unreadCount</span>
                 }
             </NavLink>
         </div>
 
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="reports">
-                <span class="bi bi-graph-up" aria-hidden="true"></span> Reports
+                <span class="bi bi-bar-chart-fill" aria-hidden="true"></span> Reports
             </NavLink>
         </div>
 

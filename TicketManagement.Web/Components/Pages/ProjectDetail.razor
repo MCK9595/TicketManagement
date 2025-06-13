@@ -1,77 +1,127 @@
-﻿@page "/projects/{ProjectId:guid}"
+@page "/projects/{ProjectId:guid}"
 @using TicketManagement.Web.Services
 @using TicketManagement.Contracts.DTOs
+@using System.ComponentModel.DataAnnotations
 @inject TicketManagementApiClient ApiClient
 @inject NavigationManager Navigation
+@inject ILogger<ProjectDetail> Logger
+@inject IJSRuntime JSRuntime
 @attribute [Authorize]
+@rendermode InteractiveServer
 
 <PageTitle>@(project?.Name ?? "Project") - Ticket Management</PageTitle>
 
 @if (isLoading)
 {
-    <div class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+        <div class="text-center">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="text-muted">Loading project details...</p>
         </div>
-        <p class="mt-2 text-muted">Loading project...</p>
     </div>
 }
 else if (project != null)
 {
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="/projects">Projects</a></li>
-                    <li class="breadcrumb-item active">@project.Name</li>
-                </ol>
-            </nav>
-            <h1><span class="bi bi-folder-open" aria-hidden="true"></span> @project.Name</h1>
+    <!-- Modern Header -->
+    <div class="mb-5">
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/projects" class="text-decoration-none">Projects</a></li>
+                <li class="breadcrumb-item active text-muted">@project.Name</li>
+            </ol>
+        </nav>
+        
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h1 class="display-6 mb-2 d-flex align-items-center gap-3">
+                    <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 p-3">
+                        <i class="bi bi-folder-fill text-primary fs-4"></i>
+                    </span>
+                    @project.Name
+                </h1>
+                <p class="text-muted mb-0">@project.Description</p>
+            </div>
+            <button class="btn btn-primary" @onclick="ShowCreateTicketModal" @onclick:preventDefault="true">
+                <span class="bi bi-plus-circle" aria-hidden="true"></span> New Ticket
+            </button>
         </div>
-        <button class="btn btn-primary" @onclick="ShowCreateTicketModal">
-            <span class="bi bi-plus-circle" aria-hidden="true"></span> New Ticket
-        </button>
     </div>
 
-    <!-- Project Info -->
-    <div class="row mb-4">
-        <div class="col-md-8">
-            <div class="card">
+    <!-- Stats Cards -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Project Information</h5>
-                    <p class="card-text">@project.Description</p>
-                    <div class="row">
-                        <div class="col-sm-6">
-                            <small class="text-muted">Created: @project.CreatedAt.ToString("MMM dd, yyyy")</small>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <p class="text-muted mb-1 small">Total Tickets</p>
+                            <h3 class="mb-0">@(tickets?.Count ?? 0)</h3>
                         </div>
-                        <div class="col-sm-6 text-end">
-                            <span class="badge bg-@(project.IsActive ? "success" : "secondary")">
-                                @(project.IsActive ? "Active" : "Inactive")
-                            </span>
-                        </div>
+                        <span class="rounded-circle bg-primary bg-opacity-10 p-2">
+                            <i class="bi bi-ticket-fill text-primary"></i>
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 4px;">
+                        <div class="progress-bar bg-primary" style="width: 100%"></div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card">
+        
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Quick Stats</h5>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span>Total Tickets:</span>
-                        <span class="badge bg-primary">@(tickets?.Count ?? 0)</span>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <p class="text-muted mb-1 small">Open</p>
+                            <h3 class="mb-0">@(tickets?.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Open) ?? 0)</h3>
+                        </div>
+                        <span class="rounded-circle bg-info bg-opacity-10 p-2">
+                            <i class="bi bi-circle text-info"></i>
+                        </span>
                     </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span>Open:</span>
-                        <span class="badge bg-success">@(tickets?.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Open) ?? 0)</span>
+                    <div class="progress" style="height: 4px;">
+                        <div class="progress-bar bg-info" style="width: @((tickets?.Count ?? 0) > 0 ? (tickets.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Open) * 100.0 / tickets.Count) : 0)%"></div>
                     </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span>In Progress:</span>
-                        <span class="badge bg-warning">@(tickets?.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.InProgress) ?? 0)</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <p class="text-muted mb-1 small">In Progress</p>
+                            <h3 class="mb-0">@(tickets?.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.InProgress) ?? 0)</h3>
+                        </div>
+                        <span class="rounded-circle bg-warning bg-opacity-10 p-2">
+                            <i class="bi bi-arrow-repeat text-warning"></i>
+                        </span>
                     </div>
-                    <div class="d-flex justify-content-between">
-                        <span>Closed:</span>
-                        <span class="badge bg-secondary">@(tickets?.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Closed) ?? 0)</span>
+                    <div class="progress" style="height: 4px;">
+                        <div class="progress-bar bg-warning" style="width: @((tickets?.Count ?? 0) > 0 ? (tickets.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.InProgress) * 100.0 / tickets.Count) : 0)%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <p class="text-muted mb-1 small">Closed</p>
+                            <h3 class="mb-0">@(tickets?.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Closed) ?? 0)</h3>
+                        </div>
+                        <span class="rounded-circle bg-success bg-opacity-10 p-2">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 4px;">
+                        <div class="progress-bar bg-success" style="width: @((tickets?.Count ?? 0) > 0 ? (tickets.Count(t => t.Status == TicketManagement.Core.Enums.TicketStatus.Closed) * 100.0 / tickets.Count) : 0)%"></div>
                     </div>
                 </div>
             </div>
@@ -79,52 +129,73 @@ else if (project != null)
     </div>
 
     <!-- Tickets Table -->
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Tickets</h5>
-            <div class="d-flex gap-2">
-                <div class="input-group input-group-sm" style="width: 250px;">
-                    <input type="text" class="form-control" placeholder="Search tickets..." @bind="searchKeyword" @onkeypress="@(async (e) => { if (e.Key == "Enter") await SearchTickets(); })">
-                    <button class="btn btn-outline-secondary" type="button" @onclick="SearchTickets">
-                        <span class="bi bi-search" aria-hidden="true"></span>
-                    </button>
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-0 py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-semibold">Tickets</h5>
+                <div class="d-flex gap-3 align-items-center">
+                    <div class="input-group" style="width: 300px;">
+                        <span class="input-group-text bg-white border-end-0">
+                            <i class="bi bi-search text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control border-start-0 ps-0" placeholder="Search tickets..." 
+                               @bind="searchKeyword" @onkeypress="@(async (e) => { if (e.Key == "Enter") await SearchTickets(); })">
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
             @if (tickets?.Any() == true)
             {
                 <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
                             <tr>
-                                <th>Title</th>
-                                <th>Status</th>
-                                <th>Priority</th>
-                                <th>Assignee</th>
-                                <th>Created</th>
-                                <th>Actions</th>
+                                <th class="border-0 ps-4">Title</th>
+                                <th class="border-0">Status</th>
+                                <th class="border-0">Priority</th>
+                                <th class="border-0">Assignee</th>
+                                <th class="border-0">Created</th>
+                                <th class="border-0 text-end pe-4">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             @foreach (var ticket in tickets)
                             {
-                                <tr>
-                                    <td>
-                                        <a href="/tickets/@ticket.Id" class="text-decoration-none">
+                                <tr class="align-middle">
+                                    <td class="ps-4">
+                                        <a href="/tickets/@ticket.Id" class="text-decoration-none text-dark fw-medium">
                                             @ticket.Title
                                         </a>
                                     </td>
                                     <td>
-                                        <span class="badge bg-@GetStatusColor(ticket.Status)">@ticket.Status</span>
+                                        <span class="badge rounded-pill bg-@GetStatusColor(ticket.Status) bg-opacity-10 text-@GetStatusColor(ticket.Status) px-3 py-2">
+                                            @ticket.Status
+                                        </span>
                                     </td>
                                     <td>
-                                        <span class="badge bg-@GetPriorityColor(ticket.Priority)">@ticket.Priority</span>
+                                        <span class="badge rounded-pill bg-@GetPriorityColor(ticket.Priority) bg-opacity-10 text-@GetPriorityColor(ticket.Priority) px-3 py-2">
+                                            @ticket.Priority
+                                        </span>
                                     </td>
                                     <td>
                                         @if (ticket.Assignments?.Any() == true)
                                         {
-                                            <span class="text-muted">@ticket.Assignments.Count assigned</span>
+                                            <div class="d-flex align-items-center">
+                                                <div class="avatar-group">
+                                                    @foreach (var assignment in ticket.Assignments.Take(3))
+                                                    {
+                                                        <span class="avatar avatar-sm rounded-circle bg-primary text-white" 
+                                                              title="@assignment.AssigneeName">
+                                                            @assignment.AssigneeName.Substring(0, 1).ToUpper()
+                                                        </span>
+                                                    }
+                                                </div>
+                                                @if (ticket.Assignments.Count > 3)
+                                                {
+                                                    <span class="ms-2 text-muted small">+@(ticket.Assignments.Count - 3)</span>
+                                                }
+                                            </div>
                                         }
                                         else
                                         {
@@ -132,15 +203,15 @@ else if (project != null)
                                         }
                                     </td>
                                     <td>
-                                        <small class="text-muted">@ticket.CreatedAt.ToString("MMM dd")</small>
+                                        <small class="text-muted">@ticket.CreatedAt.ToString("MMM dd, yyyy")</small>
                                     </td>
-                                    <td>
+                                    <td class="text-end pe-4">
                                         <div class="btn-group btn-group-sm">
-                                            <a href="/tickets/@ticket.Id" class="btn btn-outline-primary btn-sm">
-                                                <span class="bi bi-eye" aria-hidden="true"></span>
+                                            <a href="/tickets/@ticket.Id" class="btn btn-link text-primary p-1" title="View">
+                                                <i class="bi bi-eye"></i>
                                             </a>
-                                            <button class="btn btn-outline-warning btn-sm" @onclick="() => ShowEditTicketModal(ticket)">
-                                                <span class="bi bi-pencil" aria-hidden="true"></span>
+                                            <button class="btn btn-link text-warning p-1" @onclick="() => ShowEditTicketModal(ticket)" title="Edit">
+                                                <i class="bi bi-pencil"></i>
                                             </button>
                                         </div>
                                     </td>
@@ -152,11 +223,14 @@ else if (project != null)
             }
             else
             {
-                <div class="text-center py-4">
-                    <span class="bi bi-clipboard-x fs-1 text-muted d-block mb-2" aria-hidden="true"></span>
-                    <p class="text-muted">No tickets found for this project</p>
-                    <button class="btn btn-primary" @onclick="ShowCreateTicketModal">
-                        <span class="bi bi-plus-circle" aria-hidden="true"></span> Create First Ticket
+                <div class="text-center py-5">
+                    <div class="mb-4">
+                        <i class="bi bi-inbox display-1 text-muted"></i>
+                    </div>
+                    <h5 class="text-muted mb-3">No tickets found</h5>
+                    <p class="text-muted mb-4">Get started by creating your first ticket for this project.</p>
+                    <button class="btn btn-primary btn-lg" @onclick="ShowCreateTicketModal" @onclick:preventDefault="true">
+                        <span class="bi bi-plus-circle" aria-hidden="true"></span> Create Your First Ticket
                     </button>
                 </div>
             }
@@ -165,70 +239,73 @@ else if (project != null)
 }
 else
 {
-    <div class="text-center py-5">
-        <span class="bi bi-exclamation-triangle fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
-        <h3>Project not found</h3>
-        <p class="text-muted mb-4">The project you're looking for doesn't exist or you don't have access to it.</p>
-        <a href="/projects" class="btn btn-primary">
-            <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Projects
-        </a>
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 60vh;">
+        <div class="text-center">
+            <i class="bi bi-exclamation-triangle display-1 text-warning mb-4 d-block"></i>
+            <h3 class="mb-3">Project not found</h3>
+            <p class="text-muted mb-4">The project you're looking for doesn't exist or you don't have access to it.</p>
+            <a href="/projects" class="btn btn-primary">
+                <i class="bi bi-arrow-left me-2"></i>Back to Projects
+            </a>
+        </div>
     </div>
 }
 
 <!-- Create Ticket Modal -->
-<div class="modal fade @(showCreateTicketModal ? "show" : "")" style="display: @(showCreateTicketModal ? "block" : "none")" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Create New Ticket</h5>
-                <button type="button" class="btn-close" @onclick="HideCreateTicketModal"></button>
-            </div>
-            <div class="modal-body">
-                <EditForm Model="ticketForm" OnValidSubmit="CreateTicket">
-                    <DataAnnotationsValidator />
-                    <ValidationSummary class="text-danger" />
+@if (showCreateTicketModal)
+{
+    <div class="modal fade show" style="display: block; background-color: rgba(0,0,0,0.5);" tabindex="-1" @onclick="HandleBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Ticket</h5>
+                    <button type="button" class="btn-close" @onclick="HideCreateTicketModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="ticketForm" OnValidSubmit="CreateTicket">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
 
-                    <div class="mb-3">
-                        <label for="ticketTitle" class="form-label">Title</label>
-                        <InputText id="ticketTitle" class="form-control" @bind-Value="ticketForm.Title" placeholder="Enter ticket title" />
-                        <ValidationMessage For="@(() => ticketForm.Title)" />
-                    </div>
+                        <div class="mb-3">
+                            <label for="ticketTitle" class="form-label">Title</label>
+                            <InputText id="ticketTitle" class="form-control" @bind-Value="ticketForm.Title" 
+                                     placeholder="Brief description of the issue" />
+                            <ValidationMessage For="@(() => ticketForm.Title)" />
+                        </div>
 
-                    <div class="mb-3">
-                        <label for="ticketDescription" class="form-label">Description</label>
-                        <InputTextArea id="ticketDescription" class="form-control" rows="3" @bind-Value="ticketForm.Description" placeholder="Enter ticket description" />
-                        <ValidationMessage For="@(() => ticketForm.Description)" />
-                    </div>
+                        <div class="mb-3">
+                            <label for="ticketDescription" class="form-label">Description</label>
+                            <InputTextArea id="ticketDescription" class="form-control" rows="3" 
+                                         @bind-Value="ticketForm.Description" 
+                                         placeholder="Provide more details about the ticket" />
+                            <ValidationMessage For="@(() => ticketForm.Description)" />
+                        </div>
 
-                    <div class="mb-3">
-                        <label for="ticketPriority" class="form-label">Priority</label>
-                        <InputSelect id="ticketPriority" class="form-select" @bind-Value="ticketForm.Priority">
-                            <option value="Low">Low</option>
-                            <option value="Medium">Medium</option>
-                            <option value="High">High</option>
-                            <option value="Critical">Critical</option>
-                        </InputSelect>
-                    </div>
+                        <div class="mb-3">
+                            <label for="ticketPriority" class="form-label">Priority</label>
+                            <InputSelect id="ticketPriority" class="form-select" @bind-Value="ticketForm.Priority">
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Critical">Critical</option>
+                            </InputSelect>
+                        </div>
 
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" @onclick="HideCreateTicketModal">Cancel</button>
-                        <button type="submit" class="btn btn-primary" disabled="@isCreatingTicket">
-                            @if (isCreatingTicket)
-                            {
-                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                            }
-                            Create Ticket
-                        </button>
-                    </div>
-                </EditForm>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="HideCreateTicketModal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@isCreatingTicket">
+                                @if (isCreatingTicket)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                Create Ticket
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
             </div>
         </div>
     </div>
-</div>
-
-@if (showCreateTicketModal)
-{
-    <div class="modal-backdrop fade show"></div>
 }
 
 @code {
@@ -260,7 +337,7 @@ else
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading project: {ex.Message}");
+            Logger.LogError(ex, "Error loading project {ProjectId}", ProjectId);
         }
     }
 
@@ -276,7 +353,7 @@ else
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading tickets: {ex.Message}");
+            Logger.LogError(ex, "Error loading tickets for project {ProjectId}", ProjectId);
         }
         finally
         {
@@ -302,20 +379,29 @@ else
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error searching tickets: {ex.Message}");
+            Logger.LogError(ex, "Error searching tickets for project {ProjectId} with keyword '{Keyword}'", ProjectId, searchKeyword);
         }
     }
 
     private void ShowCreateTicketModal()
     {
+        Logger.LogInformation("ShowCreateTicketModal called for project {ProjectId}", ProjectId);
         ticketForm = new CreateTicketFormModel();
         showCreateTicketModal = true;
+        Logger.LogDebug("showCreateTicketModal set to: {ShowCreateTicketModal}", showCreateTicketModal);
+        StateHasChanged();
     }
 
     private void HideCreateTicketModal()
     {
         showCreateTicketModal = false;
         ticketForm = new CreateTicketFormModel();
+        StateHasChanged();
+    }
+
+    private void HandleBackdropClick()
+    {
+        HideCreateTicketModal();
     }
 
     private void ShowEditTicketModal(TicketDto ticket)
@@ -344,7 +430,7 @@ else
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error creating ticket: {ex.Message}");
+            Logger.LogError(ex, "Error creating ticket for project {ProjectId}", ProjectId);
         }
         finally
         {
@@ -356,9 +442,9 @@ else
     {
         return status switch
         {
-            TicketManagement.Core.Enums.TicketStatus.Open => "primary",
+            TicketManagement.Core.Enums.TicketStatus.Open => "info",
             TicketManagement.Core.Enums.TicketStatus.InProgress => "warning",
-            TicketManagement.Core.Enums.TicketStatus.Review => "info",
+            TicketManagement.Core.Enums.TicketStatus.Review => "secondary",
             TicketManagement.Core.Enums.TicketStatus.Closed => "success",
             TicketManagement.Core.Enums.TicketStatus.OnHold => "secondary",
             _ => "dark"
@@ -369,7 +455,7 @@ else
     {
         return priority switch
         {
-            TicketManagement.Core.Enums.TicketPriority.Low => "secondary",
+            TicketManagement.Core.Enums.TicketPriority.Low => "success",
             TicketManagement.Core.Enums.TicketPriority.Medium => "primary",
             TicketManagement.Core.Enums.TicketPriority.High => "warning",
             TicketManagement.Core.Enums.TicketPriority.Critical => "danger",

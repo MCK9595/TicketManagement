@@ -68,7 +68,7 @@ public class NotificationsController : ControllerBase
                 PageSize = result.PageSize
             };
 
-            return Ok(ApiResponseDto<PagedResultDto<NotificationDto>>.SuccessResult(pagedResult));
+            return ApiResponseDto<PagedResultDto<NotificationDto>>.SuccessResult(pagedResult);
         }
         catch (Exception ex)
         {
@@ -102,7 +102,7 @@ public class NotificationsController : ControllerBase
                 RelatedTicketTitle = null // TODO: チケットタイトルを取得する実装が必要
             }).ToList();
 
-            return Ok(ApiResponseDto<List<NotificationDto>>.SuccessResult(notificationDtos));
+            return ApiResponseDto<List<NotificationDto>>.SuccessResult(notificationDtos);
         }
         catch (Exception ex)
         {
@@ -141,7 +141,7 @@ public class NotificationsController : ControllerBase
                 }).ToList()
             };
 
-            return Ok(ApiResponseDto<NotificationSummaryDto>.SuccessResult(summary));
+            return ApiResponseDto<NotificationSummaryDto>.SuccessResult(summary);
         }
         catch (Exception ex)
         {
@@ -161,7 +161,7 @@ public class NotificationsController : ControllerBase
             var userId = GetCurrentUserId();
             var count = await _notificationService.GetUnreadCountAsync(userId);
 
-            return Ok(ApiResponseDto<int>.SuccessResult(count));
+            return ApiResponseDto<int>.SuccessResult(count);
         }
         catch (Exception ex)
         {
@@ -189,7 +189,7 @@ public class NotificationsController : ControllerBase
 
             await _notificationService.MarkAsReadAsync(id);
 
-            return Ok(ApiResponseDto<string>.SuccessResult("success", "Notification marked as read"));
+            return ApiResponseDto<string>.SuccessResult("success", "Notification marked as read");
         }
         catch (ArgumentException ex)
         {
@@ -213,7 +213,7 @@ public class NotificationsController : ControllerBase
             var userId = GetCurrentUserId();
             await _notificationService.MarkAllAsReadAsync(userId);
 
-            return Ok(ApiResponseDto<string>.SuccessResult("success", "All notifications marked as read"));
+            return ApiResponseDto<string>.SuccessResult("success", "All notifications marked as read");
         }
         catch (Exception ex)
         {
@@ -260,7 +260,7 @@ public class NotificationsController : ControllerBase
                 RelatedTicketTitle = null // TODO: チケットタイトルを取得する実装が必要
             };
 
-            return Ok(ApiResponseDto<NotificationDto>.SuccessResult(notificationDto, "Test notification created"));
+            return ApiResponseDto<NotificationDto>.SuccessResult(notificationDto, "Test notification created");
         }
         catch (Exception ex)
         {

@@ -196,7 +196,22 @@ public class TicketManagementApiClient
     {
         try
         {
-            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<TicketDto>>>($"api/projects/{projectId}/tickets", _jsonOptions);
+            var response = await _httpClient.GetFromJsonAsync<ApiResponseDto<PagedResultDto<TicketDto>>>($"api/tickets/project/{projectId}", _jsonOptions);
+            if (response?.Success == true && response.Data?.Items != null)
+            {
+                return new ApiResponseDto<List<TicketDto>>
+                {
+                    Success = true,
+                    Data = response.Data.Items,
+                    Message = response.Message
+                };
+            }
+            return response != null ? new ApiResponseDto<List<TicketDto>> 
+            { 
+                Success = response.Success, 
+                Message = response.Message, 
+                Data = new List<TicketDto>() 
+            } : null;
         }
         catch (Exception)
         {
@@ -220,7 +235,7 @@ public class TicketManagementApiClient
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"api/projects/{projectId}/tickets", createTicket);
+            var response = await _httpClient.PostAsJsonAsync($"api/tickets/project/{projectId}", createTicket);
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
