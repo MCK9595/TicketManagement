@@ -2,6 +2,7 @@ using TicketManagement.Contracts.Repositories;
 using TicketManagement.Contracts.Services;
 using TicketManagement.Core.Entities;
 using TicketManagement.Core.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace TicketManagement.Infrastructure.Services;
 
@@ -13,6 +14,7 @@ public class TicketService : ITicketService
     private readonly ICommentRepository _commentRepository;
     private readonly ITicketHistoryRepository _historyRepository;
     private readonly INotificationService _notificationService;
+    private readonly ILogger<TicketService> _logger;
 
     public TicketService(
         ITicketRepository ticketRepository,
@@ -20,7 +22,8 @@ public class TicketService : ITicketService
         ITicketAssignmentRepository assignmentRepository,
         ICommentRepository commentRepository,
         ITicketHistoryRepository historyRepository,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        ILogger<TicketService> logger)
     {
         _ticketRepository = ticketRepository;
         _projectRepository = projectRepository;
@@ -28,6 +31,7 @@ public class TicketService : ITicketService
         _commentRepository = commentRepository;
         _historyRepository = historyRepository;
         _notificationService = notificationService;
+        _logger = logger;
     }
 
     public async Task<Ticket> CreateTicketAsync(
@@ -358,7 +362,30 @@ public class TicketService : ITicketService
 
     public async Task DeleteTicketAsync(Guid ticketId, string deletedBy)
     {
+        var ticket = await _ticketRepository.GetByIdAsync(ticketId);
+        if (ticket == null)
+        {
+            throw new ArgumentException($"Ticket with ID {ticketId} not found.", nameof(ticketId));
+        }
+
+        // アサインされたユーザーに削除通知を送信
+        var assignments = await _assignmentRepository.GetAssignmentsByTicketIdAsync(ticketId);
+        foreach (var assignment in assignments)
+        {
+            if (assignment.AssigneeId != deletedBy) // 削除者本人には通知しない
+            {
+                await _notificationService.CreateNotificationAsync(
+                    assignment.AssigneeId,
+                    "Ticket Deleted",
+                    $"Ticket '{ticket.Title}' has been deleted",
+                    NotificationType.TicketDeleted);
+            }
+        }
+
+        // チケットを削除（カスケード削除でコメント、履歴なども削除される）
         await _ticketRepository.DeleteAsync(ticketId);
+
+        _logger.LogInformation("Ticket deleted: {TicketId} by user {UserId}", ticketId, deletedBy);
     }
 
     public async Task<bool> CanUserAccessTicketAsync(Guid ticketId, string userId)
@@ -366,6 +393,18 @@ public class TicketService : ITicketService
         var ticket = await _ticketRepository.GetByIdAsync(ticketId);
         if (ticket == null) return false;
 
+        return await _projectRepository.IsUserMemberOfProjectAsync(ticket.ProjectId, userId);
+    }
+
+    public async Task<bool> CanUserDeleteTicketAsync(Guid ticketId, string userId)
+    {
+        var ticket = await _ticketRepository.GetByIdAsync(ticketId);
+        if (ticket == null) return false;
+
+        // チケットの作成者は削除可能
+        if (ticket.CreatedBy == userId) return true;
+
+        // プロジェクトのメンバーかチェック
         return await _projectRepository.IsUserMemberOfProjectAsync(ticket.ProjectId, userId);
     }
 }

@@ -590,14 +590,14 @@ public class TicketsController : ControllerBase
     /// チケットを削除
     /// </summary>
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = "ProjectManager")]
+    [Authorize]
     public async Task<ActionResult<ApiResponseDto<string>>> DeleteTicket(Guid id)
     {
         try
         {
             var userId = GetCurrentUserId();
             
-            if (!await _ticketService.CanUserAccessTicketAsync(id, userId))
+            if (!await _ticketService.CanUserDeleteTicketAsync(id, userId))
             {
                 return Forbid();
             }

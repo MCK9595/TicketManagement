@@ -441,4 +441,35 @@ public class ProjectsController : ControllerBase
             return StatusCode(500, ApiResponseDto<string>.ErrorResult("Internal server error"));
         }
     }
+
+    /// <summary>
+    /// プロジェクトを削除
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponseDto<string>>> DeleteProject(Guid id)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            
+            if (!await _projectService.CanUserManageProjectAsync(id, currentUserId))
+            {
+                return Forbid();
+            }
+
+            await _projectService.DeleteProjectAsync(id, currentUserId);
+
+            return ApiResponseDto<string>.SuccessResult("success", "Project deleted successfully");
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(ApiResponseDto<string>.ErrorResult(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting project {ProjectId}", id);
+            return StatusCode(500, ApiResponseDto<string>.ErrorResult("Internal server error"));
+        }
+    }
 }

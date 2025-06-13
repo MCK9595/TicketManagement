@@ -20,4 +20,5 @@ public interface IProjectService
     Task ActivateProjectAsync(Guid projectId, string activatedBy);
     Task<bool> CanUserAccessProjectAsync(Guid projectId, string userId);
     Task<bool> CanUserManageProjectAsync(Guid projectId, string userId);
+    Task DeleteProjectAsync(Guid projectId, string deletedBy);
 }

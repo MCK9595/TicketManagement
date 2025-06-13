@@ -416,4 +416,41 @@ public class TicketManagementApiClient
             return null;
         }
     }
+
+    // Delete API methods
+    public async Task<ApiResponseDto<string>?> DeleteProjectAsync(Guid projectId)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync($"api/projects/{projectId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<string>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<string>?> DeleteTicketAsync(Guid ticketId)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync($"api/tickets/{ticketId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<string>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 }

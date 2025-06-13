@@ -5,6 +5,7 @@ using TicketManagement.Core.Enums;
 using TicketManagement.Contracts.Repositories;
 using TicketManagement.Contracts.Services;
 using TicketManagement.Infrastructure.Services;
+using Microsoft.Extensions.Logging;
 
 namespace TicketManagement.Tests.Infrastructure.Services;
 
@@ -17,6 +18,7 @@ public class TicketServiceTests
     private Mock<ICommentRepository> _mockCommentRepository;
     private Mock<ITicketHistoryRepository> _mockHistoryRepository;
     private Mock<INotificationService> _mockNotificationService;
+    private Mock<ILogger<TicketService>> _mockLogger;
     private TicketService _service;
 
     [SetUp]
@@ -28,6 +30,7 @@ public class TicketServiceTests
         _mockCommentRepository = new Mock<ICommentRepository>();
         _mockHistoryRepository = new Mock<ITicketHistoryRepository>();
         _mockNotificationService = new Mock<INotificationService>();
+        _mockLogger = new Mock<ILogger<TicketService>>();
 
         _service = new TicketService(
             _mockTicketRepository.Object,
@@ -35,7 +38,8 @@ public class TicketServiceTests
             _mockAssignmentRepository.Object,
             _mockCommentRepository.Object,
             _mockHistoryRepository.Object,
-            _mockNotificationService.Object);
+            _mockNotificationService.Object,
+            _mockLogger.Object);
     }
 
     [Test]

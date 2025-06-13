@@ -267,4 +267,39 @@ public class ProjectService : IProjectService
         var role = await GetUserRoleInProjectAsync(projectId, userId);
         return role == ProjectRole.Admin;
     }
+
+    public async Task DeleteProjectAsync(Guid projectId, string deletedBy)
+    {
+        var project = await _projectRepository.GetByIdAsync(projectId);
+        if (project == null)
+        {
+            throw new ArgumentException($"Project with ID {projectId} not found.", nameof(projectId));
+        }
+
+        // プロジェクトのメンバーに削除通知を送信
+        var members = await _projectRepository.GetProjectMembersAsync(projectId);
+        foreach (var member in members)
+        {
+            if (member.UserId != deletedBy) // 削除者本人には通知しない
+            {
+                await _notificationService.CreateNotificationAsync(
+                    member.UserId,
+                    "Project Deleted",
+                    $"Project '{project.Name}' has been deleted",
+                    NotificationType.ProjectDeleted);
+            }
+        }
+
+        // プロジェクトを削除（カスケード削除でチケット、メンバーなども削除される）
+        await _projectRepository.DeleteAsync(projectId);
+
+        // 関連キャッシュを無効化
+        await _cacheService.RemoveAsync(CacheKeys.Project(projectId));
+        foreach (var member in members)
+        {
+            await _cacheService.RemoveAsync(CacheKeys.UserProjects(member.UserId));
+        }
+
+        _logger.LogInformation("Project deleted: {ProjectId} by user {UserId}", projectId, deletedBy);
+    }
 }

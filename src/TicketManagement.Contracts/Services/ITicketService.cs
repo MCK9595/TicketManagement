@@ -21,4 +21,5 @@ public interface ITicketService
     Task<IEnumerable<Ticket>> GetRecentTicketsAsync(string userId, int count = 10);
     Task DeleteTicketAsync(Guid ticketId, string deletedBy);
     Task<bool> CanUserAccessTicketAsync(Guid ticketId, string userId);
+    Task<bool> CanUserDeleteTicketAsync(Guid ticketId, string userId);
 }

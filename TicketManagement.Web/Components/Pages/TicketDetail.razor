@@ -35,6 +35,9 @@ else if (ticket != null)
             <button class="btn btn-outline-primary" @onclick="ShowEditTicketModal">
                 <span class="bi bi-pencil" aria-hidden="true"></span> Edit
             </button>
+            <button class="btn btn-outline-danger" @onclick="ShowDeleteTicketModal">
+                <span class="bi bi-trash" aria-hidden="true"></span> Delete
+            </button>
             <a href="/projects/@ticket.ProjectId" class="btn btn-outline-secondary">
                 <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Project
             </a>
@@ -410,6 +413,47 @@ else
     </div>
 }
 
+<!-- Delete Ticket Modal -->
+@if (showDeleteTicketModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-exclamation-triangle text-danger me-2"></i>
+                        Delete Ticket
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="HideDeleteTicketModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">Are you sure you want to delete this ticket?</p>
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Warning:</strong> This action cannot be undone. All comments and ticket history will be permanently deleted.
+                    </div>
+                    @if (ticket != null)
+                    {
+                        <p><strong>Ticket:</strong> @ticket.Title</p>
+                        <p class="text-muted">@ticket.Description</p>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="HideDeleteTicketModal">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="DeleteTicket" disabled="@isDeletingTicket">
+                        @if (isDeletingTicket)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        }
+                        <i class="bi bi-trash me-1"></i>
+                        Delete Ticket
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     [Parameter] public Guid TicketId { get; set; }
 
@@ -731,5 +775,42 @@ else
     private class ChangePriorityFormModel
     {
         public string Priority { get; set; } = "Medium";
+    }
+
+    // Delete Ticket Modal
+    private bool showDeleteTicketModal = false;
+    private bool isDeletingTicket = false;
+
+    private void ShowDeleteTicketModal()
+    {
+        showDeleteTicketModal = true;
+        StateHasChanged();
+    }
+
+    private void HideDeleteTicketModal()
+    {
+        showDeleteTicketModal = false;
+        StateHasChanged();
+    }
+
+    private async Task DeleteTicket()
+    {
+        isDeletingTicket = true;
+        try
+        {
+            var response = await ApiClient.DeleteTicketAsync(TicketId);
+            if (response?.Success == true)
+            {
+                Navigation.NavigateTo($"/projects/{ticket?.ProjectId}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting ticket {TicketId}", TicketId);
+        }
+        finally
+        {
+            isDeletingTicket = false;
+        }
     }
 }
