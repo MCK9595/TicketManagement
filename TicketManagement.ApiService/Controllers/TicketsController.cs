@@ -15,15 +15,18 @@ public class TicketsController : ControllerBase
 {
     private readonly ITicketService _ticketService;
     private readonly IProjectService _projectService;
+    private readonly IUserManagementService _userManagementService;
     private readonly ILogger<TicketsController> _logger;
 
     public TicketsController(
         ITicketService ticketService, 
         IProjectService projectService,
+        IUserManagementService userManagementService,
         ILogger<TicketsController> logger)
     {
         _ticketService = ticketService;
         _projectService = projectService;
+        _userManagementService = userManagementService;
         _logger = logger;
     }
 
@@ -131,6 +134,10 @@ public class TicketsController : ControllerBase
                 return NotFound(ApiResponseDto<TicketDetailDto>.ErrorResult("Ticket not found"));
             }
 
+            // Get user information for comments
+            var commentUserIds = ticket.Comments?.Select(c => c.AuthorId).Distinct().ToList() ?? new List<string>();
+            var users = await _userManagementService.GetUsersByIdsAsync(commentUserIds);
+
             var ticketDetailDto = new TicketDetailDto
             {
                 Id = ticket.Id,
@@ -162,8 +169,11 @@ public class TicketsController : ControllerBase
                     TicketId = c.TicketId,
                     Content = c.Content,
                     AuthorId = c.AuthorId,
+                    CreatedBy = c.AuthorId,
+                    AuthorName = users.TryGetValue(c.AuthorId, out var user) ? user.DisplayName : c.AuthorId,
                     CreatedAt = c.CreatedAt,
-                    UpdatedAt = c.UpdatedAt
+                    UpdatedAt = c.UpdatedAt,
+                    IsEdited = c.UpdatedAt.HasValue
                 }).ToList() ?? new List<CommentDto>(),
                 History = ticket.Histories?.Select(h => new TicketHistoryDto
                 {

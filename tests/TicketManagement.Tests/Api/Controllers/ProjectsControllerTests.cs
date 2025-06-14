@@ -87,7 +87,8 @@ public class ProjectsControllerTests
         var response = result.Value as ApiResponseDto<List<ProjectDto>>;
         Assert.That(response, Is.Not.Null);
         Assert.That(response.Success, Is.True);
-        Assert.That(response.Data.Count, Is.EqualTo(2));
+        Assert.That(response.Data, Is.Not.Null);
+        Assert.That(response.Data!.Count, Is.EqualTo(2));
         Assert.That(response.Data[0].Name, Is.EqualTo("Project 1"));
     }
 
@@ -122,7 +123,8 @@ public class ProjectsControllerTests
         Assert.That(response, Is.Not.Null);
         Assert.That(response.Success, Is.True);
         Assert.That(response.Data.Id, Is.EqualTo(projectId));
-        Assert.That(response.Data.Name, Is.EqualTo("Test Project"));
+        Assert.That(response.Data, Is.Not.Null);
+        Assert.That(response.Data!.Name, Is.EqualTo("Test Project"));
     }
 
     [Test]
@@ -187,7 +189,7 @@ public class ProjectsControllerTests
             Tickets = new List<Ticket>()
         };
 
-        _mockProjectService.Setup(s => s.CreateProjectAsync(createDto.Name, createDto.Description, _userId))
+        _mockProjectService.Setup(s => s.CreateProjectAsync(It.IsAny<Guid>(), createDto.Name, createDto.Description, _userId))
             .ReturnsAsync(createdProject);
 
         // Act

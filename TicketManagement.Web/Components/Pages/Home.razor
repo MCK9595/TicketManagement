@@ -2,18 +2,66 @@
 @using TicketManagement.Web.Services
 @using TicketManagement.Contracts.DTOs
 @using Microsoft.AspNetCore.Authorization
+@using TicketManagement.Web.Components.Shared
 @inject TicketManagementApiClient ApiClient
 @inject NavigationManager Navigation
 @attribute [Authorize]
+@rendermode InteractiveServer
 
 <PageTitle>Dashboard - Ticket Management</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1><span class="bi bi-speedometer2" aria-hidden="true"></span> Dashboard</h1>
+    <div>
+        <h1><span class="bi bi-speedometer2" aria-hidden="true"></span> Dashboard</h1>
+        @if (selectedOrganization != null)
+        {
+            <p class="text-muted mb-0">
+                <span class="bi bi-building me-1" aria-hidden="true"></span>
+                @selectedOrganization.OrganizationDisplayName
+            </p>
+        }
+    </div>
     <AuthorizeView>
         <Authorized>
-            <div class="text-muted">
-                Welcome back, @context.User.Identity?.Name
+            <div class="d-flex align-items-center gap-3">
+                @if (userOrganizations?.Any() == true)
+                {
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <span class="bi bi-building me-2" aria-hidden="true"></span>
+                            @if (selectedOrganization != null)
+                            {
+                                @selectedOrganization.OrganizationDisplayName
+                            }
+                            else
+                            {
+                                <span>All Organizations</span>
+                            }
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <button class="dropdown-item @(selectedOrganization == null ? "active" : "")" 
+                                        @onclick="() => FilterByOrganization(null)">
+                                    <span class="bi bi-globe me-2" aria-hidden="true"></span>All Organizations
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            @foreach (var org in userOrganizations)
+                            {
+                                <li>
+                                    <button class="dropdown-item @(selectedOrganization?.OrganizationId == org.OrganizationId ? "active" : "")"
+                                            @onclick="() => FilterByOrganization(org)">
+                                        <span class="bi bi-building me-2" aria-hidden="true"></span>
+                                        @org.OrganizationDisplayName
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+                <div class="text-muted">
+                    Welcome back, @context.User.Identity?.Name
+                </div>
             </div>
         </Authorized>
         <NotAuthorized>
@@ -23,6 +71,13 @@
         </NotAuthorized>
     </AuthorizeView>
 </div>
+
+@if (isLoading)
+{
+    <LoadingSpinner Message="Loading dashboard data..." 
+                   Size="LoadingSpinner.LoadingSize.Large" 
+                   AccessibleLabel="Loading dashboard information" />
+}
 
 <AuthorizeView>
     <Authorized>
@@ -113,6 +168,13 @@
                                             <small class="text-muted">@project.CreatedAt.ToString("MMM dd")</small>
                                         </div>
                                         <p class="mb-1 text-muted">@project.Description</p>
+                                        @if (selectedOrganization == null && !string.IsNullOrEmpty(project.OrganizationName))
+                                        {
+                                            <small class="text-muted">
+                                                <span class="bi bi-building me-1" aria-hidden="true"></span>
+                                                @project.OrganizationName
+                                            </small>
+                                        }
                                     </a>
                                 }
                             </div>
@@ -180,32 +242,70 @@
 </AuthorizeView>
 
 @code {
+    private List<ProjectDto>? allProjects;
     private List<ProjectDto>? recentProjects;
     private List<TicketDto>? recentTickets;
+    private List<UserOrganizationDto>? userOrganizations;
+    private UserOrganizationDto? selectedOrganization;
     private int totalProjects = 0;
     private int totalTickets = 0;
     private int openTickets = 0;
     private int assignedTickets = 0;
+    private bool isLoading = true;
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadUserOrganizations();
         await LoadDashboardData();
+    }
+
+    private async Task LoadUserOrganizations()
+    {
+        try
+        {
+            var response = await ApiClient.GetCurrentUserDetailsAsync();
+            if (response?.Success == true && response.Data?.Organizations != null)
+            {
+                userOrganizations = response.Data.Organizations
+                    .Where(o => o.IsActive)
+                    .OrderBy(o => o.OrganizationDisplayName)
+                    .ToList();
+
+                // Auto-select first organization if only one available
+                if (userOrganizations.Count == 1)
+                {
+                    selectedOrganization = userOrganizations.First();
+                }
+            }
+            else
+            {
+                userOrganizations = new List<UserOrganizationDto>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading user organizations: {ex.Message}");
+            userOrganizations = new List<UserOrganizationDto>();
+        }
     }
 
     private async Task LoadDashboardData()
     {
+        isLoading = true;
         try
         {
             // Load projects
             var projectsResponse = await ApiClient.GetProjectsAsync();
             if (projectsResponse?.Success == true && projectsResponse.Data != null)
             {
-                recentProjects = projectsResponse.Data.OrderByDescending(p => p.CreatedAt).ToList();
-                totalProjects = recentProjects.Count;
+                allProjects = projectsResponse.Data.OrderByDescending(p => p.CreatedAt).ToList();
+                FilterDataByOrganization();
 
                 // Load tickets for each project and aggregate
                 var allTickets = new List<TicketDto>();
-                foreach (var project in recentProjects)
+                var projectsToLoad = recentProjects ?? new List<ProjectDto>();
+                
+                foreach (var project in projectsToLoad)
                 {
                     var ticketsResponse = await ApiClient.GetProjectTicketsAsync(project.Id);
                     if (ticketsResponse?.Success == true && ticketsResponse.Data != null)
@@ -215,16 +315,87 @@
                 }
 
                 recentTickets = allTickets.OrderByDescending(t => t.CreatedAt).ToList();
-                totalTickets = allTickets.Count;
-                openTickets = allTickets.Count(t => t.Status != TicketManagement.Core.Enums.TicketStatus.Closed);
-                assignedTickets = allTickets.Count(t => t.Assignments.Any());
+                CalculateStatistics(allTickets);
+            }
+            else
+            {
+                recentProjects = new List<ProjectDto>();
+                recentTickets = new List<TicketDto>();
+                ResetStatistics();
             }
         }
         catch (Exception ex)
         {
-            // Log error or show notification
             Console.WriteLine($"Error loading dashboard data: {ex.Message}");
+            recentProjects = new List<ProjectDto>();
+            recentTickets = new List<TicketDto>();
+            ResetStatistics();
         }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void FilterDataByOrganization()
+    {
+        if (allProjects == null)
+        {
+            recentProjects = new List<ProjectDto>();
+            return;
+        }
+
+        if (selectedOrganization == null)
+        {
+            recentProjects = allProjects.ToList();
+        }
+        else
+        {
+            recentProjects = allProjects
+                .Where(p => p.OrganizationId == selectedOrganization.OrganizationId)
+                .ToList();
+        }
+
+        totalProjects = recentProjects.Count;
+    }
+
+    private void CalculateStatistics(List<TicketDto> tickets)
+    {
+        totalTickets = tickets.Count;
+        openTickets = tickets.Count(t => t.Status != TicketManagement.Core.Enums.TicketStatus.Closed);
+        assignedTickets = tickets.Count(t => t.Assignments.Any());
+    }
+
+    private void ResetStatistics()
+    {
+        totalProjects = 0;
+        totalTickets = 0;
+        openTickets = 0;
+        assignedTickets = 0;
+    }
+
+    private async Task FilterByOrganization(UserOrganizationDto? organization)
+    {
+        selectedOrganization = organization;
+        FilterDataByOrganization();
+        
+        // Reload tickets for the filtered projects
+        var allTickets = new List<TicketDto>();
+        var projectsToLoad = recentProjects ?? new List<ProjectDto>();
+        
+        foreach (var project in projectsToLoad)
+        {
+            var ticketsResponse = await ApiClient.GetProjectTicketsAsync(project.Id);
+            if (ticketsResponse?.Success == true && ticketsResponse.Data != null)
+            {
+                allTickets.AddRange(ticketsResponse.Data);
+            }
+        }
+
+        recentTickets = allTickets.OrderByDescending(t => t.CreatedAt).ToList();
+        CalculateStatistics(allTickets);
+        StateHasChanged();
     }
 
     private string GetStatusColor(TicketManagement.Core.Enums.TicketStatus status)

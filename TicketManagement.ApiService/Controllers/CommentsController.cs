@@ -12,11 +12,13 @@ namespace TicketManagement.ApiService.Controllers;
 public class CommentsController : ControllerBase
 {
     private readonly ITicketService _ticketService;
+    private readonly IUserManagementService _userManagementService;
     private readonly ILogger<CommentsController> _logger;
 
-    public CommentsController(ITicketService ticketService, ILogger<CommentsController> logger)
+    public CommentsController(ITicketService ticketService, IUserManagementService userManagementService, ILogger<CommentsController> logger)
     {
         _ticketService = ticketService;
+        _userManagementService = userManagementService;
         _logger = logger;
     }
 
@@ -55,12 +57,21 @@ public class CommentsController : ControllerBase
 
             var comment = await _ticketService.AddCommentAsync(ticketId, dto.Content, userId);
 
+            // Get user display name
+            _logger.LogInformation("Getting user info for userId: {UserId}", userId);
+            var user = await _userManagementService.GetUserByIdAsync(userId);
+            _logger.LogInformation("User info retrieved: Id={UserId}, DisplayName={DisplayName}, Username={Username}", 
+                user?.Id, user?.DisplayName, user?.Username);
+            var authorName = user?.DisplayName ?? user?.Username ?? userId;
+
             var commentDto = new CommentDto
             {
                 Id = comment.Id,
                 TicketId = comment.TicketId,
                 Content = comment.Content,
                 AuthorId = comment.AuthorId,
+                CreatedBy = comment.AuthorId,
+                AuthorName = authorName,
                 CreatedAt = comment.CreatedAt,
                 UpdatedAt = comment.UpdatedAt,
                 IsEdited = comment.UpdatedAt.HasValue,
@@ -108,12 +119,18 @@ public class CommentsController : ControllerBase
                 return Forbid();
             }
 
+            // Get user display name for the comment author
+            var user = await _userManagementService.GetUserByIdAsync(targetComment.AuthorId);
+            var authorName = user?.DisplayName ?? user?.Username ?? targetComment.AuthorId;
+
             var commentDto = new CommentDto
             {
                 Id = targetComment.Id,
                 TicketId = targetComment.TicketId,
                 Content = targetComment.Content,
                 AuthorId = targetComment.AuthorId,
+                CreatedBy = targetComment.AuthorId,
+                AuthorName = authorName,
                 CreatedAt = targetComment.CreatedAt,
                 UpdatedAt = targetComment.UpdatedAt,
                 IsEdited = targetComment.UpdatedAt.HasValue,
@@ -151,12 +168,18 @@ public class CommentsController : ControllerBase
             var userId = GetCurrentUserId();
             var comment = await _ticketService.UpdateCommentAsync(id, dto.Content, userId);
 
+            // Get user display name for the comment author
+            var user = await _userManagementService.GetUserByIdAsync(comment.AuthorId);
+            var authorName = user?.DisplayName ?? user?.Username ?? comment.AuthorId;
+
             var commentDto = new CommentDto
             {
                 Id = comment.Id,
                 TicketId = comment.TicketId,
                 Content = comment.Content,
                 AuthorId = comment.AuthorId,
+                CreatedBy = comment.AuthorId,
+                AuthorName = authorName,
                 CreatedAt = comment.CreatedAt,
                 UpdatedAt = comment.UpdatedAt,
                 IsEdited = comment.UpdatedAt.HasValue,

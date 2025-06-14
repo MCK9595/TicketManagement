@@ -1,0 +1,241 @@
+/* UI/UX Improvements for Ticket Management System */
+
+/* === Loading Animations === */
+.loading-overlay {
+    backdrop-filter: blur(2px);
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* Smooth fade-in for loading spinners */
+.spinner-border {
+    animation: spin 1s linear infinite, fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* === Responsive Improvements === */
+
+/* Mobile-first organization selector */
+@media (max-width: 768px) {
+    .organization-selector .dropdown-menu {
+        width: 100%;
+        max-width: none;
+    }
+    
+    /* Stack organization info vertically on mobile */
+    .organization-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 0.5rem;
+    }
+    
+    /* Responsive organization cards */
+    .organization-card {
+        margin-bottom: 1rem;
+    }
+    
+    /* Mobile-friendly modal */
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    /* Compact navigation tabs on mobile */
+    .nav-tabs.nav-fill .nav-link {
+        font-size: 0.875rem;
+        padding: 0.5rem 0.25rem;
+    }
+    
+    /* Stack action buttons vertically on mobile */
+    .btn-group-mobile {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .btn-group-mobile .btn {
+        border-radius: 0.375rem !important;
+        margin-bottom: 0.25rem;
+    }
+}
+
+/* Tablet improvements */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .organization-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .project-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* === Enhanced Card Design === */
+.card {
+    transition: all 0.3s ease;
+    border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-color: var(--bs-primary);
+}
+
+.card.active {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* === Enhanced Notifications === */
+.alert {
+    border: none;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    animation: slideInFromTop 0.3s ease-out;
+}
+
+@keyframes slideInFromTop {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.alert.alert-success {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border-left: 4px solid #28a745;
+}
+
+.alert.alert-danger {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    border-left: 4px solid #dc3545;
+}
+
+.alert.alert-warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border-left: 4px solid #ffc107;
+}
+
+.alert.alert-info {
+    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+    border-left: 4px solid #17a2b8;
+}
+
+/* === Accessibility Improvements === */
+
+/* Focus indicators */
+.btn:focus,
+.form-control:focus,
+.form-select:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    border-color: #86b7fe;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .card {
+        border-width: 2px;
+    }
+    
+    .btn {
+        border-width: 2px;
+    }
+    
+    .alert {
+        border-width: 2px;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .card,
+    .alert,
+    .spinner-border {
+        transition: none;
+        animation: none;
+    }
+}
+
+/* === Enhanced Form Controls === */
+.form-control,
+.form-select {
+    transition: all 0.2s ease-in-out;
+    border-radius: 0.375rem;
+}
+
+.form-control:hover:not(:disabled):not([readonly]) {
+    border-color: #86b7fe;
+}
+
+.form-floating > .form-control:focus ~ label,
+.form-floating > .form-control:not(:placeholder-shown) ~ label {
+    color: var(--bs-primary);
+}
+
+/* === Enhanced Buttons === */
+.btn {
+    transition: all 0.2s ease-in-out;
+    border-radius: 0.375rem;
+    font-weight: 500;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-outline-primary:hover {
+    transform: translateY(-1px);
+}
+
+/* === Grid Layouts === */
+.organization-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.project-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
+}
+
+/* === Dark Mode Support === */
+@media (prefers-color-scheme: dark) {
+    .card {
+        background-color: var(--bs-dark);
+        border-color: rgba(255, 255, 255, 0.125);
+    }
+    
+    .alert {
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .loading-overlay {
+        background: rgba(0, 0, 0, 0.8);
+    }
+}
+
+/* === Performance Optimizations === */
+.card,
+.btn,
+.alert {
+    will-change: transform;
+}
+
+/* Optimize repaints for frequently updated elements */
+.loading-spinner,
+.progress-bar {
+    contain: layout style paint;
+}

@@ -1,0 +1,835 @@
+@page "/organizations/{organizationId:guid}/settings"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.Components.Authorization
+@using TicketManagement.Core.Enums
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@inject ILogger<OrganizationSettings> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Settings - @(organization?.DisplayName ?? "Organization") - Ticket Management</PageTitle>
+
+@if (isLoading)
+{
+    <LoadingSpinner Message="Loading organization settings..." 
+                   Size="LoadingSpinner.LoadingSize.Large" 
+                   AccessibleLabel="Loading organization settings" />
+}
+else if (organization != null && canManageSettings)
+{
+    <div class="container-fluid">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+                <li class="breadcrumb-item"><a href="/organizations/@OrganizationId">@organization.DisplayName</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Settings</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><span class="bi bi-gear" aria-hidden="true"></span> Organization Settings</h1>
+            <div class="btn-group">
+                <a href="/organizations/@OrganizationId" class="btn btn-outline-secondary">
+                    <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Organization
+                </a>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <NotificationAlert Type="NotificationAlert.NotificationType.Success"
+                             Title="Success"
+                             Message="@successMessage"
+                             IsVisible="@(!string.IsNullOrEmpty(successMessage))"
+                             OnDismiss="@(() => successMessage = null)"
+                             AutoDismissAfter="5000" />
+        }
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <NotificationAlert Type="NotificationAlert.NotificationType.Error"
+                             Title="Error"
+                             Message="@errorMessage"
+                             IsVisible="@(!string.IsNullOrEmpty(errorMessage))"
+                             OnDismiss="@(() => errorMessage = null)" />
+        }
+
+        <!-- Settings Navigation Tabs -->
+        <ul class="nav nav-tabs nav-fill mb-4" id="settingsTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "general" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("general")' type="button">
+                    <span class="bi bi-sliders me-2" aria-hidden="true"></span>General
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "permissions" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("permissions")' type="button">
+                    <span class="bi bi-shield-check me-2" aria-hidden="true"></span>Permissions
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "limits" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("limits")' type="button">
+                    <span class="bi bi-speedometer2 me-2" aria-hidden="true"></span>Limits & Usage
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "notifications" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("notifications")' type="button">
+                    <span class="bi bi-bell me-2" aria-hidden="true"></span>Notifications
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "danger" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("danger")' type="button">
+                    <span class="bi bi-exclamation-triangle me-2" aria-hidden="true"></span>Danger Zone
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <!-- General Settings Tab -->
+            @if (activeTab == "general")
+            {
+                <div class="tab-pane fade show active">
+                    <div class="row">
+                        <div class="col-lg-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">Organization Information</h5>
+                                </div>
+                                <div class="card-body">
+                                    <EditForm Model="generalSettings" OnValidSubmit="SaveGeneralSettings">
+                                        <DataAnnotationsValidator />
+
+                                        <div class="mb-3">
+                                            <label for="orgName" class="form-label">Organization Name *</label>
+                                            <InputText id="orgName" class="form-control" @bind-Value="generalSettings.Name" />
+                                            <ValidationMessage For="@(() => generalSettings.Name)" />
+                                            <div class="form-text">Used in URLs and API calls. Cannot be changed after creation.</div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="displayName" class="form-label">Display Name *</label>
+                                            <InputText id="displayName" class="form-control" @bind-Value="generalSettings.DisplayName" />
+                                            <ValidationMessage For="@(() => generalSettings.DisplayName)" />
+                                            <div class="form-text">Shown in the user interface.</div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="description" class="form-label">Description</label>
+                                            <InputTextArea id="description" class="form-control" rows="3" @bind-Value="generalSettings.Description" />
+                                            <ValidationMessage For="@(() => generalSettings.Description)" />
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <InputCheckbox id="isActive" class="form-check-input" @bind-Value="generalSettings.IsActive" />
+                                                <label class="form-check-label" for="isActive">
+                                                    Organization is active
+                                                </label>
+                                                <div class="form-text">Inactive organizations cannot create new projects or tickets.</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex justify-content-end">
+                                            <button type="submit" class="btn btn-primary" disabled="@isSavingGeneral">
+                                                @if (isSavingGeneral)
+                                                {
+                                                    <LoadingSpinner ShowIcon="true" 
+                                                                  Size="LoadingSpinner.LoadingSize.Small" 
+                                                                  Center="false" 
+                                                                  CssClass="d-inline-flex me-2" />
+                                                }
+                                                <span class="bi bi-check" aria-hidden="true"></span> Save Changes
+                                            </button>
+                                        </div>
+                                    </EditForm>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Organization Info</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-2">
+                                        <small class="text-muted">Created</small>
+                                        <div>@organization.CreatedAt.ToString("MMM dd, yyyy")</div>
+                                    </div>
+                                    <div class="mb-2">
+                                        <small class="text-muted">Created By</small>
+                                        <div>@organization.CreatedBy</div>
+                                    </div>
+                                    @if (organization.UpdatedAt.HasValue)
+                                    {
+                                        <div class="mb-2">
+                                            <small class="text-muted">Last Updated</small>
+                                            <div>@organization.UpdatedAt.Value.ToString("MMM dd, yyyy")</div>
+                                        </div>
+                                    }
+                                    <div>
+                                        <small class="text-muted">Organization ID</small>
+                                        <div class="font-monospace small">@organization.Id</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Permissions Tab -->
+            @if (activeTab == "permissions")
+            {
+                <div class="tab-pane fade show active">
+                    <div class="row">
+                        <div class="col-lg-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">Default Permissions</h5>
+                                </div>
+                                <div class="card-body">
+                                    <EditForm Model="permissionSettings" OnValidSubmit="SavePermissionSettings">
+                                        <DataAnnotationsValidator />
+
+                                        <div class="mb-4">
+                                            <label class="form-label">New Member Default Role</label>
+                                            <InputSelect class="form-select" @bind-Value="permissionSettings.DefaultMemberRole">
+                                                <option value="@OrganizationRole.Viewer">Viewer - Read-only access</option>
+                                                <option value="@OrganizationRole.Member">Member - Can create and manage tickets</option>
+                                            </InputSelect>
+                                            <div class="form-text">Role assigned to new members when they join the organization.</div>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <label class="form-label">Project Creation Permissions</label>
+                                            <InputSelect class="form-select" @bind-Value="permissionSettings.ProjectCreationRole">
+                                                <option value="@OrganizationRole.Admin">Admin Only</option>
+                                                <option value="@OrganizationRole.Manager">Manager and above</option>
+                                                <option value="@OrganizationRole.Member">Member and above</option>
+                                            </InputSelect>
+                                            <div class="form-text">Minimum role required to create new projects.</div>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <label class="form-label">Member Invitation Permissions</label>
+                                            <InputSelect class="form-select" @bind-Value="permissionSettings.InvitationRole">
+                                                <option value="@OrganizationRole.Admin">Admin Only</option>
+                                                <option value="@OrganizationRole.Manager">Manager and above</option>
+                                            </InputSelect>
+                                            <div class="form-text">Minimum role required to invite new members.</div>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <div class="form-check">
+                                                <InputCheckbox id="allowPublicProjects" class="form-check-input" @bind-Value="permissionSettings.AllowPublicProjects" />
+                                                <label class="form-check-label" for="allowPublicProjects">
+                                                    Allow public projects
+                                                </label>
+                                                <div class="form-text">Members can create projects visible to all organization members.</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <div class="form-check">
+                                                <InputCheckbox id="requireApprovalForMembers" class="form-check-input" @bind-Value="permissionSettings.RequireApprovalForMembers" />
+                                                <label class="form-check-label" for="requireApprovalForMembers">
+                                                    Require approval for new members
+                                                </label>
+                                                <div class="form-text">New member invitations must be approved by an admin.</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex justify-content-end">
+                                            <button type="submit" class="btn btn-primary" disabled="@isSavingPermissions">
+                                                @if (isSavingPermissions)
+                                                {
+                                                    <LoadingSpinner ShowIcon="true" 
+                                                                  Size="LoadingSpinner.LoadingSize.Small" 
+                                                                  Center="false" 
+                                                                  CssClass="d-inline-flex me-2" />
+                                                }
+                                                <span class="bi bi-shield-check" aria-hidden="true"></span> Save Permissions
+                                            </button>
+                                        </div>
+                                    </EditForm>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Permission Levels</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <span class="badge bg-danger me-2">Admin</span>
+                                        <div class="small">Full organization control, manage all settings and members</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <span class="badge bg-warning me-2">Manager</span>
+                                        <div class="small">Manage projects and members, invite new users</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <span class="badge bg-primary me-2">Member</span>
+                                        <div class="small">Create and manage tickets, view assigned projects</div>
+                                    </div>
+                                    <div>
+                                        <span class="badge bg-secondary me-2">Viewer</span>
+                                        <div class="small">Read-only access to organization and projects</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Limits & Usage Tab -->
+            @if (activeTab == "limits")
+            {
+                <div class="tab-pane fade show active">
+                    <div class="row">
+                        <div class="col-lg-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="mb-0">Organization Limits</h5>
+                                </div>
+                                <div class="card-body">
+                                    <EditForm Model="limitSettings" OnValidSubmit="SaveLimitSettings">
+                                        <DataAnnotationsValidator />
+
+                                        <div class="mb-3">
+                                            <label for="maxProjects" class="form-label">Maximum Projects</label>
+                                            <InputNumber id="maxProjects" class="form-control" @bind-Value="limitSettings.MaxProjects" />
+                                            <ValidationMessage For="@(() => limitSettings.MaxProjects)" />
+                                            <div class="form-text">Maximum number of projects this organization can create.</div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="maxMembers" class="form-label">Maximum Members</label>
+                                            <InputNumber id="maxMembers" class="form-control" @bind-Value="limitSettings.MaxMembers" />
+                                            <ValidationMessage For="@(() => limitSettings.MaxMembers)" />
+                                            <div class="form-text">Maximum number of members in this organization.</div>
+                                        </div>
+
+                                        <div class="d-flex justify-content-end">
+                                            <button type="submit" class="btn btn-primary" disabled="@isSavingLimits">
+                                                @if (isSavingLimits)
+                                                {
+                                                    <LoadingSpinner ShowIcon="true" 
+                                                                  Size="LoadingSpinner.LoadingSize.Small" 
+                                                                  Center="false" 
+                                                                  CssClass="d-inline-flex me-2" />
+                                                }
+                                                <span class="bi bi-speedometer2" aria-hidden="true"></span> Save Limits
+                                            </button>
+                                        </div>
+                                    </EditForm>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Current Usage</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between">
+                                            <span>Projects</span>
+                                            <span>@organization.CurrentProjects / @organization.MaxProjects</span>
+                                        </div>
+                                        <div class="progress">
+                                            <div class="progress-bar @(GetUsageBarColor(organization.CurrentProjects, organization.MaxProjects))" 
+                                                 role="progressbar" 
+                                                 style="width: @(GetUsagePercentage(organization.CurrentProjects, organization.MaxProjects))%">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between">
+                                            <span>Members</span>
+                                            <span>@organization.CurrentMembers / @organization.MaxMembers</span>
+                                        </div>
+                                        <div class="progress">
+                                            <div class="progress-bar @(GetUsageBarColor(organization.CurrentMembers, organization.MaxMembers))" 
+                                                 role="progressbar" 
+                                                 style="width: @(GetUsagePercentage(organization.CurrentMembers, organization.MaxMembers))%">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Notifications Tab -->
+            @if (activeTab == "notifications")
+            {
+                <div class="tab-pane fade show active">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">Notification Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <EditForm Model="notificationSettings" OnValidSubmit="SaveNotificationSettings">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6>Email Notifications</h6>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <InputCheckbox id="emailNewMembers" class="form-check-input" @bind-Value="notificationSettings.EmailNewMembers" />
+                                                <label class="form-check-label" for="emailNewMembers">
+                                                    New member joins
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <InputCheckbox id="emailNewProjects" class="form-check-input" @bind-Value="notificationSettings.EmailNewProjects" />
+                                                <label class="form-check-label" for="emailNewProjects">
+                                                    New project created
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <InputCheckbox id="emailWeeklySummary" class="form-check-input" @bind-Value="notificationSettings.EmailWeeklySummary" />
+                                                <label class="form-check-label" for="emailWeeklySummary">
+                                                    Weekly activity summary
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6>In-App Notifications</h6>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <InputCheckbox id="inAppMemberActivity" class="form-check-input" @bind-Value="notificationSettings.InAppMemberActivity" />
+                                                <label class="form-check-label" for="inAppMemberActivity">
+                                                    Member activity
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <InputCheckbox id="inAppProjectUpdates" class="form-check-input" @bind-Value="notificationSettings.InAppProjectUpdates" />
+                                                <label class="form-check-label" for="inAppProjectUpdates">
+                                                    Project updates
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <div class="form-check">
+                                                <InputCheckbox id="inAppSystemAlerts" class="form-check-input" @bind-Value="notificationSettings.InAppSystemAlerts" />
+                                                <label class="form-check-label" for="inAppSystemAlerts">
+                                                    System alerts
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-primary" disabled="@isSavingNotifications">
+                                        @if (isSavingNotifications)
+                                        {
+                                            <LoadingSpinner ShowIcon="true" 
+                                                          Size="LoadingSpinner.LoadingSize.Small" 
+                                                          Center="false" 
+                                                          CssClass="d-inline-flex me-2" />
+                                        }
+                                        <span class="bi bi-bell" aria-hidden="true"></span> Save Notifications
+                                    </button>
+                                </div>
+                            </EditForm>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Danger Zone Tab -->
+            @if (activeTab == "danger")
+            {
+                <div class="tab-pane fade show active">
+                    <div class="card border-danger">
+                        <div class="card-header bg-danger text-white">
+                            <h5 class="mb-0"><span class="bi bi-exclamation-triangle" aria-hidden="true"></span> Danger Zone</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-danger">
+                                <strong>Warning!</strong> Actions in this section cannot be undone. Please proceed with caution.
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>Archive Organization</h6>
+                                    <p class="text-muted">Archive this organization. Archived organizations are read-only and cannot create new projects or tickets.</p>
+                                    <button class="btn btn-outline-warning" @onclick="ShowArchiveConfirmation" disabled="@(!organization.IsActive)">
+                                        <span class="bi bi-archive" aria-hidden="true"></span> 
+                                        @(organization.IsActive ? "Archive Organization" : "Organization Archived")
+                                    </button>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Delete Organization</h6>
+                                    <p class="text-muted">Permanently delete this organization and all its data. This action cannot be undone.</p>
+                                    <button class="btn btn-danger" @onclick="ShowDeleteConfirmation">
+                                        <span class="bi bi-trash" aria-hidden="true"></span> Delete Organization
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+else if (!canManageSettings)
+{
+    <div class="text-center py-5">
+        <span class="bi bi-shield-exclamation fs-1 text-warning d-block mb-3" aria-hidden="true"></span>
+        <h3>Access Denied</h3>
+        <p class="text-muted">You don't have permission to manage organization settings.</p>
+        <a href="/organizations/@OrganizationId" class="btn btn-primary">
+            <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Organization
+        </a>
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <span class="bi bi-exclamation-triangle fs-1 text-warning d-block mb-3" aria-hidden="true"></span>
+        <h3>Organization not found</h3>
+        <p class="text-muted">The organization you're looking for doesn't exist.</p>
+        <a href="/organizations" class="btn btn-primary">
+            <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Organizations
+        </a>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid OrganizationId { get; set; }
+
+    private OrganizationDto? organization;
+    private bool isLoading = true;
+    private bool canManageSettings = false;
+    private string activeTab = "general";
+    private string? successMessage;
+    private string? errorMessage;
+    private string? currentUserId;
+
+    // Form models
+    private GeneralSettingsModel generalSettings = new();
+    private PermissionSettingsModel permissionSettings = new();
+    private LimitSettingsModel limitSettings = new();
+    private NotificationSettingsModel notificationSettings = new();
+
+    // Saving states
+    private bool isSavingGeneral = false;
+    private bool isSavingPermissions = false;
+    private bool isSavingLimits = false;
+    private bool isSavingNotifications = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCurrentUser();
+        await LoadOrganization();
+    }
+
+    private async Task LoadCurrentUser()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            currentUserId = authState.User.FindFirst("sub")?.Value 
+                           ?? authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading current user");
+        }
+    }
+
+    private async Task LoadOrganization()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await ApiClient.GetOrganizationAsync(OrganizationId);
+            if (response?.Success == true)
+            {
+                organization = response.Data;
+                canManageSettings = await CheckManagePermissions();
+                LoadSettingsFromOrganization();
+            }
+            else
+            {
+                Logger.LogWarning("Failed to load organization {OrganizationId}: {Message}", 
+                    OrganizationId, response?.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading organization {OrganizationId}", OrganizationId);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task<bool> CheckManagePermissions()
+    {
+        if (organization == null || string.IsNullOrEmpty(currentUserId)) return false;
+
+        try
+        {
+            var membersResponse = await ApiClient.GetOrganizationMembersAsync(OrganizationId);
+            if (membersResponse?.Success == true)
+            {
+                var currentMember = membersResponse.Data?.FirstOrDefault(m => m.UserId == currentUserId);
+                return currentMember?.Role == OrganizationRole.Admin;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error checking manage permissions");
+        }
+        
+        return false;
+    }
+
+    private void LoadSettingsFromOrganization()
+    {
+        if (organization == null) return;
+
+        generalSettings = new GeneralSettingsModel
+        {
+            Name = organization.Name,
+            DisplayName = organization.DisplayName ?? string.Empty,
+            Description = organization.Description ?? string.Empty,
+            IsActive = organization.IsActive
+        };
+
+        limitSettings = new LimitSettingsModel
+        {
+            MaxProjects = organization.MaxProjects,
+            MaxMembers = organization.MaxMembers
+        };
+
+        // Load other settings with defaults
+        permissionSettings = new PermissionSettingsModel();
+        notificationSettings = new NotificationSettingsModel();
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+        StateHasChanged();
+    }
+
+    private async Task SaveGeneralSettings()
+    {
+        isSavingGeneral = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var updateDto = new UpdateOrganizationDto
+            {
+                Name = generalSettings.Name,
+                DisplayName = generalSettings.DisplayName,
+                Description = generalSettings.Description
+            };
+
+            var response = await ApiClient.UpdateOrganizationAsync(OrganizationId, updateDto);
+            
+            if (response?.Success == true)
+            {
+                successMessage = "General settings saved successfully.";
+                organization = response.Data; // Update local organization data
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to save general settings.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving general settings");
+            errorMessage = "An unexpected error occurred while saving settings.";
+        }
+        finally
+        {
+            isSavingGeneral = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SavePermissionSettings()
+    {
+        isSavingPermissions = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            // In a real implementation, you would call an API to save permission settings
+            await Task.Delay(1000); // Simulate API call
+            successMessage = "Permission settings saved successfully.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving permission settings");
+            errorMessage = "An unexpected error occurred while saving permission settings.";
+        }
+        finally
+        {
+            isSavingPermissions = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveLimitSettings()
+    {
+        isSavingLimits = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            // In a real implementation, you would call an API to save limit settings
+            await Task.Delay(1000); // Simulate API call
+            successMessage = "Limit settings saved successfully.";
+            
+            // Update organization limits locally
+            if (organization != null)
+            {
+                organization.MaxProjects = limitSettings.MaxProjects;
+                organization.MaxMembers = limitSettings.MaxMembers;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving limit settings");
+            errorMessage = "An unexpected error occurred while saving limit settings.";
+        }
+        finally
+        {
+            isSavingLimits = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveNotificationSettings()
+    {
+        isSavingNotifications = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            // In a real implementation, you would call an API to save notification settings
+            await Task.Delay(1000); // Simulate API call
+            successMessage = "Notification settings saved successfully.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving notification settings");
+            errorMessage = "An unexpected error occurred while saving notification settings.";
+        }
+        finally
+        {
+            isSavingNotifications = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowArchiveConfirmation()
+    {
+        // In a real implementation, show a confirmation modal
+        errorMessage = "Archive functionality not yet implemented.";
+    }
+
+    private void ShowDeleteConfirmation()
+    {
+        // In a real implementation, show a confirmation modal
+        errorMessage = "Delete functionality not yet implemented.";
+    }
+
+    private double GetUsagePercentage(int current, int max)
+    {
+        if (max == 0) return 0;
+        return Math.Min(100, (double)current / max * 100);
+    }
+
+    private string GetUsageBarColor(int current, int max)
+    {
+        var percentage = GetUsagePercentage(current, max);
+        return percentage switch
+        {
+            >= 90 => "bg-danger",
+            >= 75 => "bg-warning",
+            >= 50 => "bg-info",
+            _ => "bg-success"
+        };
+    }
+
+    // Form Models
+    private class GeneralSettingsModel
+    {
+        [Required]
+        [StringLength(100, MinimumLength = 3)]
+        public string Name { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(200, MinimumLength = 1)]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [StringLength(500)]
+        public string Description { get; set; } = string.Empty;
+
+        public bool IsActive { get; set; } = true;
+    }
+
+    private class PermissionSettingsModel
+    {
+        public OrganizationRole DefaultMemberRole { get; set; } = OrganizationRole.Member;
+        public OrganizationRole ProjectCreationRole { get; set; } = OrganizationRole.Manager;
+        public OrganizationRole InvitationRole { get; set; } = OrganizationRole.Manager;
+        public bool AllowPublicProjects { get; set; } = true;
+        public bool RequireApprovalForMembers { get; set; } = false;
+    }
+
+    private class LimitSettingsModel
+    {
+        [Range(1, 10000)]
+        public int MaxProjects { get; set; } = 100;
+
+        [Range(1, 50000)]
+        public int MaxMembers { get; set; } = 1000;
+    }
+
+    private class NotificationSettingsModel
+    {
+        public bool EmailNewMembers { get; set; } = true;
+        public bool EmailNewProjects { get; set; } = true;
+        public bool EmailWeeklySummary { get; set; } = false;
+        public bool InAppMemberActivity { get; set; } = true;
+        public bool InAppProjectUpdates { get; set; } = true;
+        public bool InAppSystemAlerts { get; set; } = true;
+    }
+}

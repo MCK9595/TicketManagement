@@ -39,10 +39,34 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("DefaultPolicy", policy =>
     {
-        policy.WithOrigins(builder.Configuration["Frontend:Url"] ?? "https://localhost:5173")
+        // In development, allow multiple possible frontend URLs
+        var allowedOrigins = new List<string>();
+        
+        var configuredUrl = builder.Configuration["Frontend:Url"];
+        if (!string.IsNullOrEmpty(configuredUrl))
+        {
+            allowedOrigins.Add(configuredUrl);
+        }
+        
+        // Add common development URLs
+        if (builder.Environment.IsDevelopment())
+        {
+            allowedOrigins.AddRange(new[] 
+            {
+                "https://localhost:7133",
+                "http://localhost:7133",
+                "https://localhost:5173",
+                "http://localhost:5173",
+                "https://localhost:40797",
+                "http://localhost:37491"
+            });
+        }
+        
+        policy.WithOrigins(allowedOrigins.Distinct().ToArray())
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials(); // SignalRのために必要
+              .AllowCredentials() // Required for SignalR
+              .SetIsOriginAllowed(origin => builder.Environment.IsDevelopment()); // Allow any origin in development
     });
 });
 
@@ -120,10 +144,34 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("ProjectMember", policy =>
         policy.RequireAuthenticatedUser())
     .AddPolicy("AdminOnly", policy =>
-        policy.RequireRole("admin"));
+        policy.RequireRole("admin"))
+    
+    // Organization-based policies
+    .AddPolicy("OrganizationAdmin", policy =>
+        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.OrganizationRoleRequirement(TicketManagement.Core.Enums.OrganizationRole.Admin)))
+    .AddPolicy("OrganizationManager", policy =>
+        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.OrganizationRoleRequirement(TicketManagement.Core.Enums.OrganizationRole.Manager)))
+    .AddPolicy("OrganizationMember", policy =>
+        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.OrganizationRoleRequirement(TicketManagement.Core.Enums.OrganizationRole.Member)))
+    .AddPolicy("OrganizationViewer", policy =>
+        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.OrganizationRoleRequirement(TicketManagement.Core.Enums.OrganizationRole.Viewer)))
+    
+    // Project-based policies  
+    .AddPolicy("ProjectAdmin", policy =>
+        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.ProjectRoleRequirement(TicketManagement.Core.Enums.ProjectRole.Admin)))
+    .AddPolicy("ProjectMemberRole", policy =>
+        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.ProjectRoleRequirement(TicketManagement.Core.Enums.ProjectRole.Member)))
+    .AddPolicy("ProjectViewer", policy =>
+        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.ProjectRoleRequirement(TicketManagement.Core.Enums.ProjectRole.Viewer)));
+
+// Register authorization handlers
+builder.Services.AddScoped<IAuthorizationHandler, TicketManagement.ApiService.Authorization.OrganizationRoleHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, TicketManagement.ApiService.Authorization.ProjectRoleHandler>();
 
 // Register repositories
 builder.Services.AddScoped(typeof(IRepository<,>), typeof(Repository<,>));
+builder.Services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+builder.Services.AddScoped<IOrganizationMemberRepository, OrganizationMemberRepository>();
 builder.Services.AddScoped<ITicketRepository, TicketRepository>();
 builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddScoped<ICommentRepository, CommentRepository>();
@@ -136,11 +184,16 @@ builder.Services.AddStructuredLogging(builder.Configuration);
 
 // Register services
 builder.Services.AddScoped<ICacheService, CacheService>();
+builder.Services.AddScoped<IOrganizationService, OrganizationService>();
 builder.Services.AddScoped<ITicketService, TicketService>();
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IRealtimeNotificationService, SignalRNotificationService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+
+// Register HttpClient for UserManagementService
+builder.Services.AddHttpClient<UserManagementService>();
 
 // Add controllers and API endpoints with global filters
 builder.Services.AddControllers(options =>

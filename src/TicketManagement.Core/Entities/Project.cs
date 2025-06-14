@@ -3,6 +3,7 @@ namespace TicketManagement.Core.Entities;
 public class Project
 {
     public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
@@ -10,6 +11,7 @@ public class Project
     public bool IsActive { get; set; }
     
     // Navigation
+    public Organization Organization { get; set; } = null!;
     public ICollection<ProjectMember> Members { get; set; } = new List<ProjectMember>();
     public ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
 }

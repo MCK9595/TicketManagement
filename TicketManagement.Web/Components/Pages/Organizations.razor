@@ -1,0 +1,344 @@
+@page "/organizations"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.Components.Authorization
+@using TicketManagement.Core.Enums
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@inject ILogger<Organizations> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Organizations - Ticket Management</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><span class="bi bi-building" aria-hidden="true"></span> Organizations</h1>
+    <button class="btn btn-primary" @onclick="ShowCreateOrganizationModal" @onclick:preventDefault="true">
+        <span class="bi bi-plus-circle" aria-hidden="true"></span> New Organization
+    </button>
+</div>
+
+@if (isLoading)
+{
+    <LoadingSpinner Message="Loading organizations..." 
+                   Size="LoadingSpinner.LoadingSize.Large" 
+                   AccessibleLabel="Loading organization information" />
+}
+else if (organizations?.Any() == true)
+{
+    <div class="row">
+        @foreach (var organization in organizations)
+        {
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <a href="/organizations/@organization.Id" class="text-decoration-none">
+                                @organization.DisplayName
+                            </a>
+                        </h5>
+                        <p class="text-muted small">@organization.Name</p>
+                        <p class="card-text text-muted">@organization.Description</p>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">
+                                Created @organization.CreatedAt.ToString("MMM dd, yyyy")
+                            </small>
+                            <span class="badge bg-@(organization.IsActive ? "success" : "secondary")">
+                                @(organization.IsActive ? "Active" : "Inactive")
+                            </span>
+                        </div>
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <small class="text-muted">Projects</small>
+                                <div class="fw-bold">@organization.CurrentProjects</div>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Members</small>
+                                <div class="fw-bold">@organization.CurrentMembers</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        <div class="btn-group w-100" role="group">
+                            <a href="/organizations/@organization.Id" class="btn btn-outline-primary btn-sm">
+                                <span class="bi bi-eye" aria-hidden="true"></span> View
+                            </a>
+                            <a href="/organizations/@organization.Id/projects" class="btn btn-outline-secondary btn-sm">
+                                <span class="bi bi-folder" aria-hidden="true"></span> Projects
+                            </a>
+                            @if (CanEditOrganization(organization))
+                            {
+                                <button class="btn btn-outline-warning btn-sm" @onclick="() => ShowEditOrganizationModal(organization)">
+                                    <span class="bi bi-pencil" aria-hidden="true"></span> Edit
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <span class="bi bi-building-x fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+        <h3>No organizations found</h3>
+        <p class="text-muted mb-4">Create your first organization to get started with project management.</p>
+        <button class="btn btn-primary btn-lg" @onclick="ShowCreateOrganizationModal" @onclick:preventDefault="true">
+            <span class="bi bi-plus-circle" aria-hidden="true"></span> Create Your First Organization
+        </button>
+    </div>
+}
+
+<!-- Create/Edit Organization Modal -->
+@if (showOrganizationModal)
+{
+    <div class="modal fade show" style="display: block; background-color: rgba(0,0,0,0.5);" tabindex="-1" @onclick="HandleBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(isEditMode ? "Edit Organization" : "Create New Organization")</h5>
+                    <button type="button" class="btn-close" @onclick="HideOrganizationModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            @errorMessage
+                            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+                        </div>
+                    }
+                    
+                    <EditForm Model="organizationForm" OnValidSubmit="SaveOrganization">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label for="orgName" class="form-label">Organization Name</label>
+                            <InputText id="orgName" class="form-control" @bind-Value="organizationForm.Name" placeholder="Enter organization name" />
+                            <ValidationMessage For="@(() => organizationForm.Name)" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="orgDisplayName" class="form-label">Display Name</label>
+                            <InputText id="orgDisplayName" class="form-control" @bind-Value="organizationForm.DisplayName" placeholder="Enter display name" />
+                            <ValidationMessage For="@(() => organizationForm.DisplayName)" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="orgDescription" class="form-label">Description</label>
+                            <InputTextArea id="orgDescription" class="form-control" rows="3" @bind-Value="organizationForm.Description" placeholder="Enter organization description" />
+                            <ValidationMessage For="@(() => organizationForm.Description)" />
+                        </div>
+
+                        @if (isEditMode)
+                        {
+                            <div class="mb-3">
+                                <label for="maxProjects" class="form-label">Maximum Projects</label>
+                                <InputNumber id="maxProjects" class="form-control" @bind-Value="organizationForm.MaxProjects" />
+                                <ValidationMessage For="@(() => organizationForm.MaxProjects)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="maxMembers" class="form-label">Maximum Members</label>
+                                <InputNumber id="maxMembers" class="form-control" @bind-Value="organizationForm.MaxMembers" />
+                                <ValidationMessage For="@(() => organizationForm.MaxMembers)" />
+                            </div>
+                        }
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="HideOrganizationModal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@isSaving">
+                                @if (isSaving)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                @(isEditMode ? "Update Organization" : "Create Organization")
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<OrganizationDto>? organizations;
+    private bool isLoading = true;
+    private bool showOrganizationModal = false;
+    private bool isEditMode = false;
+    private bool isSaving = false;
+    private OrganizationFormModel organizationForm = new();
+    private OrganizationDto? currentOrganization;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOrganizations();
+    }
+
+    private async Task LoadOrganizations()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await ApiClient.GetOrganizationsAsync();
+            if (response?.Success == true && response.Data != null)
+            {
+                organizations = response.Data.OrderByDescending(o => o.CreatedAt).ToList();
+            }
+            else
+            {
+                organizations = new List<OrganizationDto>();
+                if (!string.IsNullOrEmpty(response?.Message))
+                {
+                    Logger.LogWarning("Failed to load organizations: {Message}", response.Message);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading organizations");
+            organizations = new List<OrganizationDto>();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowCreateOrganizationModal()
+    {
+        isEditMode = false;
+        organizationForm = new OrganizationFormModel();
+        currentOrganization = null;
+        errorMessage = null;
+        showOrganizationModal = true;
+        StateHasChanged();
+    }
+
+    private void ShowEditOrganizationModal(OrganizationDto organization)
+    {
+        isEditMode = true;
+        currentOrganization = organization;
+        organizationForm = new OrganizationFormModel
+        {
+            Name = organization.Name,
+            DisplayName = organization.DisplayName,
+            Description = organization.Description,
+            MaxProjects = organization.MaxProjects,
+            MaxMembers = organization.MaxMembers
+        };
+        errorMessage = null;
+        showOrganizationModal = true;
+        StateHasChanged();
+    }
+
+    private void HideOrganizationModal()
+    {
+        showOrganizationModal = false;
+        organizationForm = new OrganizationFormModel();
+        currentOrganization = null;
+        StateHasChanged();
+    }
+
+    private void HandleBackdropClick()
+    {
+        HideOrganizationModal();
+    }
+
+    private async Task SaveOrganization()
+    {
+        isSaving = true;
+        StateHasChanged();
+        
+        try
+        {
+            if (isEditMode && currentOrganization != null)
+            {
+                var updateDto = new UpdateOrganizationDto
+                {
+                    Name = organizationForm.Name,
+                    DisplayName = organizationForm.DisplayName,
+                    Description = organizationForm.Description
+                };
+
+                var response = await ApiClient.UpdateOrganizationAsync(currentOrganization.Id, updateDto);
+                
+                if (response?.Success == true)
+                {
+                    HideOrganizationModal();
+                    await LoadOrganizations();
+                }
+                else
+                {
+                    errorMessage = response?.Message ?? "Failed to update organization. Please try again.";
+                }
+            }
+            else
+            {
+                var createDto = new CreateOrganizationDto
+                {
+                    Name = organizationForm.Name,
+                    DisplayName = organizationForm.DisplayName,
+                    Description = organizationForm.Description
+                };
+
+                var response = await ApiClient.CreateOrganizationAsync(createDto);
+                
+                if (response?.Success == true)
+                {
+                    HideOrganizationModal();
+                    await Task.Delay(500);
+                    await LoadOrganizations();
+                }
+                else
+                {
+                    errorMessage = response?.Message ?? "Failed to create organization. Please try again.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving organization");
+            errorMessage = "An unexpected error occurred. Please try again.";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool CanEditOrganization(OrganizationDto organization)
+    {
+        // In a real application, you would check the user's role in the organization
+        // For now, assume all users can edit organizations they're members of
+        return true;
+    }
+
+    private class OrganizationFormModel
+    {
+        [Required]
+        [StringLength(100, MinimumLength = 1)]
+        public string Name { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(200, MinimumLength = 1)]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [StringLength(2000)]
+        public string Description { get; set; } = string.Empty;
+
+        [Range(1, 10000)]
+        public int MaxProjects { get; set; } = 100;
+
+        [Range(1, 50000)]
+        public int MaxMembers { get; set; } = 1000;
+    }
+}

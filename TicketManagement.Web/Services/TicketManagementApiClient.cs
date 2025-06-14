@@ -453,4 +453,243 @@ public class TicketManagementApiClient
             return null;
         }
     }
+
+    // Organizations API
+    public async Task<ApiResponseDto<List<OrganizationDto>>?> GetOrganizationsAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<OrganizationDto>>>("api/organizations", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<List<UserOrganizationDto>>?> GetOrganizationsWithRolesAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<UserOrganizationDto>>>("api/organizations/with-roles", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<OrganizationDto>?> GetOrganizationAsync(Guid organizationId)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<OrganizationDto>>($"api/organizations/{organizationId}", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<OrganizationDto>?> CreateOrganizationAsync(CreateOrganizationDto createOrganization)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("api/organizations", createOrganization);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            if (response.IsSuccessStatusCode)
+            {
+                return JsonSerializer.Deserialize<ApiResponseDto<OrganizationDto>>(content, _jsonOptions);
+            }
+            else
+            {
+                // Try to parse error response
+                try
+                {
+                    var errorResponse = JsonSerializer.Deserialize<ApiResponseDto<OrganizationDto>>(content, _jsonOptions);
+                    return errorResponse;
+                }
+                catch
+                {
+                    // If parsing fails, return a generic error
+                    return new ApiResponseDto<OrganizationDto>
+                    {
+                        Success = false,
+                        Message = $"Request failed with status {response.StatusCode}: {response.ReasonPhrase}"
+                    };
+                }
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"HTTP error creating organization: {ex.Message}");
+            return new ApiResponseDto<OrganizationDto>
+            {
+                Success = false,
+                Message = "Network error occurred. Please check your connection and try again."
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating organization: {ex.Message}");
+            return new ApiResponseDto<OrganizationDto>
+            {
+                Success = false,
+                Message = "An unexpected error occurred. Please try again."
+            };
+        }
+    }
+
+    public async Task<ApiResponseDto<OrganizationDto>?> UpdateOrganizationAsync(Guid organizationId, UpdateOrganizationDto updateOrganization)
+    {
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync($"api/organizations/{organizationId}", updateOrganization);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<OrganizationDto>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<string>?> DeleteOrganizationAsync(Guid organizationId)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync($"api/organizations/{organizationId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<string>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    // Organization Members API
+    public async Task<ApiResponseDto<List<OrganizationMemberDto>>?> GetOrganizationMembersAsync(Guid organizationId)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<OrganizationMemberDto>>>($"api/organizations/{organizationId}/members", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<OrganizationMemberDto>?> AddOrganizationMemberAsync(Guid organizationId, AddOrganizationMemberDto addMember)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"api/organizations/{organizationId}/members", addMember);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<OrganizationMemberDto>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<OrganizationMemberDto>?> UpdateOrganizationMemberRoleAsync(Guid organizationId, string userId, UpdateOrganizationMemberDto updateRole)
+    {
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync($"api/organizations/{organizationId}/members/{userId}/role", updateRole);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<OrganizationMemberDto>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<string>?> RemoveOrganizationMemberAsync(Guid organizationId, string userId)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync($"api/organizations/{organizationId}/members/{userId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<string>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<List<ProjectDto>>?> GetOrganizationProjectsAsync(Guid organizationId)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<ProjectDto>>>($"api/organizations/{organizationId}/projects", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    // Users API
+    public async Task<ApiResponseDto<UserDetailDto>?> GetCurrentUserDetailsAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<UserDetailDto>>("api/users/me/details", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<List<UserDto>>?> SearchUsersAsync(string searchTerm)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<UserDto>>>($"api/users/search?term={Uri.EscapeDataString(searchTerm)}", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<UserDto>?> GetUserAsync(string userId)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<UserDto>>($"api/users/{userId}", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 }

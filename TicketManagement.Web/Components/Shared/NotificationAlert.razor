@@ -1,0 +1,125 @@
+@if (IsVisible)
+{
+    <div class="alert @GetAlertClass() alert-dismissible fade show @CssClass" 
+         role="alert" 
+         style="@(IsFixed ? "position: fixed; top: 20px; right: 20px; z-index: 1050; max-width: 400px;" : "")">
+        
+        @if (ShowIcon)
+        {
+            <span class="@GetIconClass() me-2" aria-hidden="true"></span>
+        }
+        
+        @if (!string.IsNullOrEmpty(Title))
+        {
+            <strong>@Title</strong>
+            @if (!string.IsNullOrEmpty(Message))
+            {
+                <br />
+            }
+        }
+        
+        @if (!string.IsNullOrEmpty(Message))
+        {
+            @Message
+        }
+        
+        @if (ShowActionButton && !string.IsNullOrEmpty(ActionText))
+        {
+            <hr />
+            <button type="button" class="btn btn-outline-@GetButtonVariant() btn-sm" @onclick="OnActionClick">
+                @ActionText
+            </button>
+        }
+        
+        @if (IsDismissible)
+        {
+            <button type="button" class="btn-close" @onclick="Dismiss" aria-label="Close"></button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public NotificationType Type { get; set; } = NotificationType.Info;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public bool IsVisible { get; set; } = true;
+    [Parameter] public bool IsDismissible { get; set; } = true;
+    [Parameter] public bool ShowIcon { get; set; } = true;
+    [Parameter] public bool IsFixed { get; set; } = false;
+    [Parameter] public bool ShowActionButton { get; set; } = false;
+    [Parameter] public string? ActionText { get; set; }
+    [Parameter] public EventCallback OnActionClick { get; set; }
+    [Parameter] public EventCallback OnDismiss { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public int AutoDismissAfter { get; set; } = 0; // 0 = no auto dismiss, otherwise milliseconds
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AutoDismissAfter > 0 && IsVisible)
+        {
+            _ = Task.Delay(AutoDismissAfter).ContinueWith(async _ =>
+            {
+                await InvokeAsync(() =>
+                {
+                    IsVisible = false;
+                    StateHasChanged();
+                });
+            });
+        }
+    }
+
+    private async Task Dismiss()
+    {
+        IsVisible = false;
+        await OnDismiss.InvokeAsync();
+        StateHasChanged();
+    }
+
+    private string GetAlertClass()
+    {
+        return Type switch
+        {
+            NotificationType.Success => "alert-success",
+            NotificationType.Warning => "alert-warning",
+            NotificationType.Error => "alert-danger",
+            NotificationType.Info => "alert-info",
+            NotificationType.Primary => "alert-primary",
+            _ => "alert-info"
+        };
+    }
+
+    private string GetIconClass()
+    {
+        return Type switch
+        {
+            NotificationType.Success => "bi bi-check-circle-fill",
+            NotificationType.Warning => "bi bi-exclamation-triangle-fill",
+            NotificationType.Error => "bi bi-x-circle-fill",
+            NotificationType.Info => "bi bi-info-circle-fill",
+            NotificationType.Primary => "bi bi-bell-fill",
+            _ => "bi bi-info-circle-fill"
+        };
+    }
+
+    private string GetButtonVariant()
+    {
+        return Type switch
+        {
+            NotificationType.Success => "success",
+            NotificationType.Warning => "warning",
+            NotificationType.Error => "danger",
+            NotificationType.Info => "info",
+            NotificationType.Primary => "primary",
+            _ => "info"
+        };
+    }
+
+    public enum NotificationType
+    {
+        Success,
+        Warning,
+        Error,
+        Info,
+        Primary
+    }
+}

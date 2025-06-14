@@ -12,18 +12,26 @@ namespace TicketManagement.Tests.Infrastructure.Services;
 public class ProjectServiceTests
 {
     private Mock<IProjectRepository> _mockProjectRepository;
+    private Mock<IOrganizationService> _mockOrganizationService;
     private Mock<INotificationService> _mockNotificationService;
     private Mock<ICacheService> _mockCacheService;
+    private Mock<Microsoft.Extensions.Logging.ILogger<ProjectService>> _mockLogger;
     private ProjectService _service;
 
     [SetUp]
     public void Setup()
     {
         _mockProjectRepository = new Mock<IProjectRepository>();
+        _mockOrganizationService = new Mock<IOrganizationService>();
         _mockNotificationService = new Mock<INotificationService>();
         _mockCacheService = new Mock<ICacheService>();
-        var mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger<ProjectService>>();
-        _service = new ProjectService(_mockProjectRepository.Object, _mockNotificationService.Object, _mockCacheService.Object, mockLogger.Object);
+        _mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger<ProjectService>>();
+        _service = new ProjectService(
+            _mockProjectRepository.Object, 
+            _mockOrganizationService.Object,
+            _mockNotificationService.Object, 
+            _mockCacheService.Object, 
+            _mockLogger.Object);
     }
 
     [Test]
@@ -90,7 +98,15 @@ public class ProjectServiceTests
             .ReturnsAsync(expectedProject);
 
         // Act
-        var result = await _service.CreateProjectAsync(name, description, createdBy);
+        var organizationId = Guid.NewGuid();
+        
+        // Setup organization service mocks
+        _mockOrganizationService.Setup(s => s.CanUserCreateProjectAsync(organizationId, createdBy))
+            .ReturnsAsync(true);
+        _mockOrganizationService.Setup(s => s.CanCreateProjectAsync(organizationId))
+            .ReturnsAsync(true);
+        
+        var result = await _service.CreateProjectAsync(organizationId, name, description, createdBy);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -107,7 +123,7 @@ public class ProjectServiceTests
     {
         // Act & Assert
         Assert.ThrowsAsync<ArgumentException>(() => 
-            _service.CreateProjectAsync("", "description", "user"));
+            _service.CreateProjectAsync(Guid.NewGuid(), "", "description", "user"));
     }
 
     [Test]
@@ -115,7 +131,7 @@ public class ProjectServiceTests
     {
         // Act & Assert
         Assert.ThrowsAsync<ArgumentException>(() => 
-            _service.CreateProjectAsync("Project Name", "description", ""));
+            _service.CreateProjectAsync(Guid.NewGuid(), "Project Name", "description", ""));
     }
 
     [Test]

@@ -9,6 +9,8 @@ public class TicketDbContext : DbContext
     {
     }
 
+    public DbSet<Organization> Organizations { get; set; } = null!;
+    public DbSet<OrganizationMember> OrganizationMembers { get; set; } = null!;
     public DbSet<Project> Projects { get; set; } = null!;
     public DbSet<ProjectMember> ProjectMembers { get; set; } = null!;
     public DbSet<Ticket> Tickets { get; set; } = null!;

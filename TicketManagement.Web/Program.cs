@@ -28,6 +28,11 @@ builder.Services.AddHttpClient<TicketManagementApiClient>(client =>
 {
     client.BaseAddress = new("https+http://apiservice");
 })
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    // Allow HTTP/2 and HTTP/1.1
+    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+})
 .AddHttpMessageHandler<AuthorizationHandler>();
 
 // Add OpenID Connect authentication with Keycloak

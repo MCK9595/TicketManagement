@@ -1,0 +1,465 @@
+@page "/organizations/{organizationId:guid}"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.Components.Authorization
+@using TicketManagement.Core.Enums
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@inject ILogger<OrganizationDetail> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>@(organization?.DisplayName ?? "Organization") - Ticket Management</PageTitle>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading organization details...</p>
+    </div>
+}
+else if (organization != null)
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">@organization.DisplayName</li>
+                </ol>
+            </nav>
+            <h1><span class="bi bi-building" aria-hidden="true"></span> @organization.DisplayName</h1>
+            <p class="text-muted">@organization.Name</p>
+        </div>
+        @if (CanManageOrganization())
+        {
+            <div class="btn-group">
+                <button class="btn btn-outline-primary" @onclick="ShowEditOrganizationModal">
+                    <span class="bi bi-pencil" aria-hidden="true"></span> Edit Organization
+                </button>
+                <button class="btn btn-outline-success" @onclick="ShowAddMemberModal">
+                    <span class="bi bi-person-plus" aria-hidden="true"></span> Add Member
+                </button>
+            </div>
+        }
+    </div>
+
+    <!-- Organization Info -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">About</h5>
+                    <p class="card-text">@organization.Description</p>
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <small class="text-muted">Created</small>
+                            <div>@organization.CreatedAt.ToString("MMMM dd, yyyy")</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <small class="text-muted">Status</small>
+                            <div>
+                                <span class="badge bg-@(organization.IsActive ? "success" : "secondary")">
+                                    @(organization.IsActive ? "Active" : "Inactive")
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Statistics</h5>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="h4 text-primary">@organization.CurrentProjects</div>
+                            <small class="text-muted">Projects</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="h4 text-success">@organization.CurrentMembers</div>
+                            <small class="text-muted">Members</small>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="h6">@organization.MaxProjects</div>
+                            <small class="text-muted">Max Projects</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="h6">@organization.MaxMembers</div>
+                            <small class="text-muted">Max Members</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs" id="organizationTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "members" ? "active" : "")" 
+                    @onclick='() => SetActiveTab("members")' type="button">
+                <span class="bi bi-people" aria-hidden="true"></span> Members (@organization.CurrentMembers)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "projects" ? "active" : "")" 
+                    @onclick='() => SetActiveTab("projects")' type="button">
+                <span class="bi bi-folder" aria-hidden="true"></span> Projects (@organization.CurrentProjects)
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content mt-3">
+        <!-- Members Tab -->
+        @if (activeTab == "members")
+        {
+            <div class="tab-pane fade show active">
+                @if (isLoadingMembers)
+                {
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <span class="ms-2">Loading members...</span>
+                    </div>
+                }
+                else if (members?.Any() == true)
+                {
+                    <div class="row">
+                        @foreach (var member in members)
+                        {
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <h6 class="card-title mb-1">@(member.UserName ?? member.UserId)</h6>
+                                                <p class="card-text text-muted small">@member.UserEmail</p>
+                                                <span class="badge bg-@GetRoleBadgeColor(member.Role)">
+                                                    @member.Role.ToString()
+                                                </span>
+                                            </div>
+                                            @if (CanManageMembers() && member.UserId != currentUserId)
+                                            {
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                        <span class="bi bi-three-dots" aria-hidden="true"></span>
+                                                    </button>
+                                                    <ul class="dropdown-menu">
+                                                        <li><button class="dropdown-item" @onclick="() => ShowChangeRoleModal(member)">Change Role</button></li>
+                                                        <li><button class="dropdown-item text-danger" @onclick="() => RemoveMember(member)">Remove</button></li>
+                                                    </ul>
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="mt-2">
+                                            <small class="text-muted">Joined @member.JoinedAt.ToString("MMM yyyy")</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-5">
+                        <span class="bi bi-people fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+                        <h5>No members found</h5>
+                        <p class="text-muted">Add members to start collaborating.</p>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- Projects Tab -->
+        @if (activeTab == "projects")
+        {
+            <div class="tab-pane fade show active">
+                @if (isLoadingProjects)
+                {
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <span class="ms-2">Loading projects...</span>
+                    </div>
+                }
+                else if (projects?.Any() == true)
+                {
+                    <div class="row">
+                        @foreach (var project in projects)
+                        {
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6 class="card-title">
+                                            <a href="/projects/@project.Id" class="text-decoration-none">
+                                                @project.Name
+                                            </a>
+                                        </h6>
+                                        <p class="card-text text-muted small">@project.Description</p>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">
+                                                Created @project.CreatedAt.ToString("MMM dd, yyyy")
+                                            </small>
+                                            <span class="badge bg-@(project.IsActive ? "success" : "secondary")">
+                                                @(project.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="card-footer bg-transparent">
+                                        <a href="/projects/@project.Id" class="btn btn-outline-primary btn-sm">
+                                            <span class="bi bi-eye" aria-hidden="true"></span> View
+                                        </a>
+                                        <a href="/projects/@project.Id/tickets" class="btn btn-outline-secondary btn-sm ms-1">
+                                            <span class="bi bi-clipboard-data" aria-hidden="true"></span> Tickets
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-5">
+                        <span class="bi bi-folder fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
+                        <h5>No projects found</h5>
+                        <p class="text-muted">Create projects to start managing tickets.</p>
+                        <a href="/projects" class="btn btn-primary">
+                            <span class="bi bi-plus-circle" aria-hidden="true"></span> Create Project
+                        </a>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <span class="bi bi-exclamation-triangle fs-1 text-warning d-block mb-3" aria-hidden="true"></span>
+        <h3>Organization not found</h3>
+        <p class="text-muted">The organization you're looking for doesn't exist or you don't have permission to view it.</p>
+        <a href="/organizations" class="btn btn-primary">
+            <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Organizations
+        </a>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid OrganizationId { get; set; }
+
+    private OrganizationDto? organization;
+    private List<OrganizationMemberDto>? members;
+    private List<ProjectDto>? projects;
+    private bool isLoading = true;
+    private bool isLoadingMembers = false;
+    private bool isLoadingProjects = false;
+    private string activeTab = "members";
+    private string? currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCurrentUser();
+        await LoadOrganization();
+        await LoadActiveTabData();
+    }
+
+    private async Task LoadCurrentUser()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            currentUserId = authState.User.FindFirst("sub")?.Value 
+                           ?? authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading current user");
+        }
+    }
+
+    private async Task LoadOrganization()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await ApiClient.GetOrganizationAsync(OrganizationId);
+            if (response?.Success == true)
+            {
+                organization = response.Data;
+            }
+            else
+            {
+                Logger.LogWarning("Failed to load organization {OrganizationId}: {Message}", 
+                    OrganizationId, response?.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading organization {OrganizationId}", OrganizationId);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadActiveTabData()
+    {
+        if (activeTab == "members")
+        {
+            await LoadMembers();
+        }
+        else if (activeTab == "projects")
+        {
+            await LoadProjects();
+        }
+    }
+
+    private async Task LoadMembers()
+    {
+        isLoadingMembers = true;
+        try
+        {
+            var response = await ApiClient.GetOrganizationMembersAsync(OrganizationId);
+            if (response?.Success == true)
+            {
+                members = response.Data?.OrderBy(m => m.UserName ?? m.UserId).ToList();
+            }
+            else
+            {
+                members = new List<OrganizationMemberDto>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading organization members");
+            members = new List<OrganizationMemberDto>();
+        }
+        finally
+        {
+            isLoadingMembers = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadProjects()
+    {
+        isLoadingProjects = true;
+        try
+        {
+            var response = await ApiClient.GetOrganizationProjectsAsync(OrganizationId);
+            if (response?.Success == true)
+            {
+                projects = response.Data?.OrderByDescending(p => p.CreatedAt).ToList() ?? new List<ProjectDto>();
+                Logger.LogInformation("Loaded {Count} projects for organization {OrgId}", projects.Count, OrganizationId);
+            }
+            else
+            {
+                projects = new List<ProjectDto>();
+                Logger.LogWarning("Failed to load projects for organization {OrgId}", OrganizationId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading organization projects");
+            projects = new List<ProjectDto>();
+        }
+        finally
+        {
+            isLoadingProjects = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SetActiveTab(string tab)
+    {
+        activeTab = tab;
+        await LoadActiveTabData();
+    }
+
+    private void ShowEditOrganizationModal()
+    {
+        // Navigate to edit page or show modal
+        Navigation.NavigateTo($"/organizations/{OrganizationId}/edit");
+    }
+
+    private void ShowAddMemberModal()
+    {
+        // Navigate to add member page or show modal
+        Navigation.NavigateTo($"/organizations/{OrganizationId}/members/add");
+    }
+
+    private void ShowChangeRoleModal(OrganizationMemberDto member)
+    {
+        // Show change role modal
+        Navigation.NavigateTo($"/organizations/{OrganizationId}/members/{member.UserId}/edit");
+    }
+
+    private async Task RemoveMember(OrganizationMemberDto member)
+    {
+        if (await ConfirmRemoveMember(member))
+        {
+            try
+            {
+                var response = await ApiClient.RemoveOrganizationMemberAsync(OrganizationId, member.UserId);
+                if (response?.Success == true)
+                {
+                    await LoadMembers();
+                    // Also reload organization to update member count
+                    await LoadOrganization();
+                }
+                else
+                {
+                    Logger.LogWarning("Failed to remove member: {Message}", response?.Message);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error removing organization member");
+            }
+        }
+    }
+
+    private async Task<bool> ConfirmRemoveMember(OrganizationMemberDto member)
+    {
+        // In a real application, you would show a confirmation dialog
+        // For now, just return true
+        return true;
+    }
+
+    private bool CanManageOrganization()
+    {
+        // Check if current user has admin or manager role
+        var currentMember = members?.FirstOrDefault(m => m.UserId == currentUserId);
+        return currentMember?.Role == OrganizationRole.Admin || currentMember?.Role == OrganizationRole.Manager;
+    }
+
+    private bool CanManageMembers()
+    {
+        // Check if current user has admin role
+        var currentMember = members?.FirstOrDefault(m => m.UserId == currentUserId);
+        return currentMember?.Role == OrganizationRole.Admin;
+    }
+
+    private string GetRoleBadgeColor(OrganizationRole role)
+    {
+        return role switch
+        {
+            OrganizationRole.Admin => "danger",
+            OrganizationRole.Manager => "warning",
+            OrganizationRole.Member => "primary",
+            OrganizationRole.Viewer => "secondary",
+            _ => "secondary"
+        };
+    }
+}

@@ -20,18 +20,17 @@ public class NotificationHubService : IAsyncDisposable
 
     public async Task StartAsync(string apiBaseUrl, string? accessToken = null)
     {
-        // Handle Aspire service discovery scheme conversion
-        var resolvedUrl = apiBaseUrl;
-        
-        // If using Aspire service discovery, replace the scheme and service name with actual URL
-        if (apiBaseUrl.StartsWith("https+http://"))
+        // Ensure we have a valid URL
+        if (string.IsNullOrEmpty(apiBaseUrl))
         {
-            // In development, use the known API service URL
-            resolvedUrl = "https://localhost:7521";
-            _logger.LogInformation("Using development URL for SignalR: {ResolvedUrl}", resolvedUrl);
+            throw new ArgumentException("API base URL cannot be empty", nameof(apiBaseUrl));
         }
         
-        var hubUrl = $"{resolvedUrl.TrimEnd('/')}/hubs/notifications";
+        // Clean up the URL
+        var resolvedUrl = apiBaseUrl.TrimEnd('/');
+        _logger.LogInformation("Starting SignalR connection to: {ResolvedUrl}", resolvedUrl);
+        
+        var hubUrl = $"{resolvedUrl}/hubs/notifications";
         
         _hubConnection = new HubConnectionBuilder()
             .WithUrl(hubUrl, options =>
@@ -40,6 +39,18 @@ public class NotificationHubService : IAsyncDisposable
                 {
                     options.AccessTokenProvider = () => Task.FromResult<string?>(accessToken);
                 }
+                
+                // Configure HTTP client options
+                options.HttpMessageHandlerFactory = (handler) =>
+                {
+                    if (handler is HttpClientHandler clientHandler)
+                    {
+                        // Accept any certificate in development
+                        clientHandler.ServerCertificateCustomValidationCallback = 
+                            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                    }
+                    return handler;
+                };
             })
             .WithAutomaticReconnect()
             .Build();

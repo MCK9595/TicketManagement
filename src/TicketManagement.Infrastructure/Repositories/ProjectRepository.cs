@@ -13,16 +13,27 @@ public class ProjectRepository : Repository<Project, Guid>, IProjectRepository
 
     public async Task<IEnumerable<Project>> GetProjectsByUserIdAsync(string userId)
     {
-        return await _context.Projects
+        var projects = await _context.Projects
             .Include(p => p.Members)
-            .Where(p => p.Members.Any(m => m.UserId == userId))
+            .Include(p => p.Organization)
+            .Where(p => p.Members.Any(m => m.UserId == userId) && p.IsActive)
             .ToListAsync();
+        
+        return projects;
     }
 
     public async Task<IEnumerable<Project>> GetActiveProjectsAsync()
     {
         return await _context.Projects
             .Where(p => p.IsActive)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<IEnumerable<Project>> GetProjectsByOrganizationIdAsync(Guid organizationId)
+    {
+        return await _context.Projects
+            .Where(p => p.OrganizationId == organizationId && p.IsActive)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync();
     }

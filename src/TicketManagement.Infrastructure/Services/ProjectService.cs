@@ -9,19 +9,26 @@ namespace TicketManagement.Infrastructure.Services;
 public class ProjectService : IProjectService
 {
     private readonly IProjectRepository _projectRepository;
+    private readonly IOrganizationService _organizationService;
     private readonly INotificationService _notificationService;
     private readonly ICacheService _cacheService;
     private readonly ILogger<ProjectService> _logger;
 
-    public ProjectService(IProjectRepository projectRepository, INotificationService notificationService, ICacheService cacheService, ILogger<ProjectService> logger)
+    public ProjectService(
+        IProjectRepository projectRepository, 
+        IOrganizationService organizationService,
+        INotificationService notificationService, 
+        ICacheService cacheService, 
+        ILogger<ProjectService> logger)
     {
         _projectRepository = projectRepository;
+        _organizationService = organizationService;
         _notificationService = notificationService;
         _cacheService = cacheService;
         _logger = logger;
     }
 
-    public async Task<Project> CreateProjectAsync(string name, string description, string createdBy)
+    public async Task<Project> CreateProjectAsync(Guid organizationId, string name, string description, string createdBy)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Project name cannot be empty", nameof(name));
@@ -29,9 +36,18 @@ public class ProjectService : IProjectService
         if (string.IsNullOrWhiteSpace(createdBy))
             throw new ArgumentException("CreatedBy cannot be empty", nameof(createdBy));
 
+        // Check if user can create project in this organization
+        if (!await _organizationService.CanUserCreateProjectAsync(organizationId, createdBy))
+            throw new UnauthorizedAccessException("User does not have permission to create projects in this organization");
+
+        // Check if organization can add more projects
+        if (!await _organizationService.CanCreateProjectAsync(organizationId))
+            throw new InvalidOperationException("Organization has reached its project limit");
+
         var project = new Project
         {
             Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
             Name = name,
             Description = description,
             CreatedAt = DateTime.UtcNow,
@@ -52,7 +68,8 @@ public class ProjectService : IProjectService
         project.Members.Add(adminMember);
         var createdProject = await _projectRepository.AddAsync(project);
         
-        _logger.LogInformation("Project created: {ProjectId} for user {UserId}", createdProject.Id, createdBy);
+        _logger.LogInformation("Project created: {ProjectId} in organization {OrganizationId} by user {UserId}", 
+            createdProject.Id, organizationId, createdBy);
 
         // キャッシュを無効化
         var cacheKey = CacheKeys.UserProjects(createdBy);
@@ -123,6 +140,22 @@ public class ProjectService : IProjectService
     public async Task<IEnumerable<Project>> GetActiveProjectsAsync()
     {
         return await _projectRepository.GetActiveProjectsAsync();
+    }
+
+    public async Task<IEnumerable<Project>> GetProjectsByOrganizationAsync(Guid organizationId)
+    {
+        var cacheKey = $"org-projects:{organizationId}";
+        var cachedProjects = await _cacheService.GetAsync<IEnumerable<Project>>(cacheKey);
+        
+        if (cachedProjects != null)
+        {
+            return cachedProjects;
+        }
+
+        var projects = await _projectRepository.GetProjectsByOrganizationIdAsync(organizationId);
+        await _cacheService.SetAsync(cacheKey, projects, TimeSpan.FromMinutes(15));
+
+        return projects;
     }
 
     public async Task<ProjectMember> AddMemberAsync(Guid projectId, string userId, ProjectRole role, string addedBy)

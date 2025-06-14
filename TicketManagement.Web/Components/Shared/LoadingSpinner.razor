@@ -1,13 +1,163 @@
-<div class="d-flex justify-content-center align-items-center p-4">
-    <div class="spinner-border text-primary" role="status">
-        <span class="visually-hidden">Loading...</span>
+@if (IsFullScreen)
+{
+    <div class="loading-overlay d-flex justify-content-center align-items-center position-fixed w-100 h-100" 
+         style="top: 0; left: 0; background: rgba(255,255,255,0.9); z-index: 9999;">
+        <div class="text-center">
+            <div class="spinner-border @GetSpinnerClass()" role="status" aria-label="Loading">
+                <span class="visually-hidden">@(AccessibleLabel ?? "Loading content")...</span>
+            </div>
+            @if (!string.IsNullOrEmpty(Message))
+            {
+                <div class="mt-3 @GetTextClass()">@Message</div>
+            }
+            @if (ShowProgress && Progress.HasValue)
+            {
+                <div class="mt-3 w-100" style="max-width: 300px;">
+                    <div class="progress">
+                        <div class="progress-bar @GetProgressClass()" 
+                             role="progressbar" 
+                             style="width: @(Progress.Value)%" 
+                             aria-valuenow="@Progress.Value" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            @if (ShowProgressText)
+                            {
+                                <span>@Progress.Value%</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
     </div>
-    @if (!string.IsNullOrEmpty(Message))
-    {
-        <span class="ms-2 text-muted">@Message</span>
-    }
-</div>
+}
+else
+{
+    <div class="@GetContainerClass()">
+        @if (ShowIcon)
+        {
+            <div class="spinner-border @GetSpinnerClass()" role="status" aria-label="Loading">
+                <span class="visually-hidden">@(AccessibleLabel ?? "Loading content")...</span>
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(Message))
+        {
+            <span class="@(ShowIcon ? "ms-2" : "") @GetTextClass()">@Message</span>
+        }
+        @if (ShowProgress && Progress.HasValue)
+        {
+            <div class="@(ShowIcon || !string.IsNullOrEmpty(Message) ? "mt-2" : "") w-100">
+                <div class="progress">
+                    <div class="progress-bar @GetProgressClass()" 
+                         role="progressbar" 
+                         style="width: @(Progress.Value)%" 
+                         aria-valuenow="@Progress.Value" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100">
+                        @if (ShowProgressText)
+                        {
+                            <span>@Progress.Value%</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
 
 @code {
     [Parameter] public string? Message { get; set; }
+    [Parameter] public LoadingSize Size { get; set; } = LoadingSize.Medium;
+    [Parameter] public LoadingVariant Variant { get; set; } = LoadingVariant.Primary;
+    [Parameter] public bool IsFullScreen { get; set; } = false;
+    [Parameter] public bool ShowIcon { get; set; } = true;
+    [Parameter] public bool ShowProgress { get; set; } = false;
+    [Parameter] public bool ShowProgressText { get; set; } = true;
+    [Parameter] public int? Progress { get; set; }
+    [Parameter] public string? AccessibleLabel { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public bool Center { get; set; } = true;
+
+    private string GetContainerClass()
+    {
+        var classes = new List<string>();
+        
+        if (Center)
+            classes.Add("d-flex justify-content-center align-items-center");
+        
+        classes.Add("p-4");
+        
+        if (!string.IsNullOrEmpty(CssClass))
+            classes.Add(CssClass);
+            
+        return string.Join(" ", classes);
+    }
+
+    private string GetSpinnerClass()
+    {
+        var classes = new List<string>();
+        
+        // Size
+        classes.Add(Size switch
+        {
+            LoadingSize.Small => "spinner-border-sm",
+            LoadingSize.Large => "", // Default size is medium-large
+            _ => "" // Medium is default
+        });
+        
+        // Color variant
+        classes.Add(Variant switch
+        {
+            LoadingVariant.Primary => "text-primary",
+            LoadingVariant.Secondary => "text-secondary",
+            LoadingVariant.Success => "text-success",
+            LoadingVariant.Warning => "text-warning",
+            LoadingVariant.Danger => "text-danger",
+            LoadingVariant.Info => "text-info",
+            _ => "text-primary"
+        });
+        
+        return string.Join(" ", classes.Where(c => !string.IsNullOrEmpty(c)));
+    }
+    
+    private string GetTextClass()
+    {
+        return Size switch
+        {
+            LoadingSize.Small => "small text-muted",
+            LoadingSize.Large => "fs-5 text-muted",
+            _ => "text-muted"
+        };
+    }
+    
+    private string GetProgressClass()
+    {
+        return Variant switch
+        {
+            LoadingVariant.Primary => "bg-primary",
+            LoadingVariant.Secondary => "bg-secondary",
+            LoadingVariant.Success => "bg-success",
+            LoadingVariant.Warning => "bg-warning",
+            LoadingVariant.Danger => "bg-danger",
+            LoadingVariant.Info => "bg-info",
+            _ => "bg-primary"
+        };
+    }
+
+    public enum LoadingSize
+    {
+        Small,
+        Medium,
+        Large
+    }
+
+    public enum LoadingVariant
+    {
+        Primary,
+        Secondary,
+        Success,
+        Warning,
+        Danger,
+        Info
+    }
 }

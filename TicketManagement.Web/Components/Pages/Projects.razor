@@ -3,6 +3,7 @@
 @using TicketManagement.Contracts.DTOs
 @using Microsoft.Extensions.Logging
 @using Microsoft.AspNetCore.Components.Authorization
+@using TicketManagement.Web.Components.Shared
 @inject TicketManagementApiClient ApiClient
 @inject NavigationManager Navigation
 @inject ILogger<Projects> Logger
@@ -13,20 +14,72 @@
 <PageTitle>Projects - Ticket Management</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1><span class="bi bi-folder-fill" aria-hidden="true"></span> Projects</h1>
-    <button class="btn btn-primary" @onclick="ShowCreateProjectModal" @onclick:preventDefault="true">
-        <span class="bi bi-plus-circle" aria-hidden="true"></span> New Project
-    </button>
+    <div>
+        <h1><span class="bi bi-folder-fill" aria-hidden="true"></span> Projects</h1>
+        @if (selectedOrganization != null)
+        {
+            <p class="text-muted mb-0">
+                <span class="bi bi-building me-1" aria-hidden="true"></span>
+                @selectedOrganization.OrganizationDisplayName
+            </p>
+        }
+    </div>
+    <div class="d-flex gap-2">
+        @if (userOrganizations?.Any() == true)
+        {
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <span class="bi bi-building me-2" aria-hidden="true"></span>
+                    @if (selectedOrganization != null)
+                    {
+                        @selectedOrganization.OrganizationDisplayName
+                    }
+                    else
+                    {
+                        <span>All Organizations</span>
+                    }
+                </button>
+                <ul class="dropdown-menu">
+                    <li>
+                        <button class="dropdown-item @(selectedOrganization == null ? "active" : "")" 
+                                @onclick="() => FilterByOrganization(null)">
+                            <span class="bi bi-globe me-2" aria-hidden="true"></span>All Organizations
+                        </button>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    @foreach (var org in userOrganizations)
+                    {
+                        <li>
+                            <button class="dropdown-item @(selectedOrganization?.OrganizationId == org.OrganizationId ? "active" : "")"
+                                    @onclick="() => FilterByOrganization(org)">
+                                <span class="bi bi-building me-2" aria-hidden="true"></span>
+                                @org.OrganizationDisplayName
+                            </button>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+        <button class="btn btn-primary" @onclick="ShowCreateProjectModal" @onclick:preventDefault="true" 
+                disabled="@(selectedOrganization == null)">
+            <span class="bi bi-plus-circle" aria-hidden="true"></span> New Project
+        </button>
+    </div>
 </div>
+
+@if (selectedOrganization == null && userOrganizations?.Any() == true)
+{
+    <div class="alert alert-info">
+        <span class="bi bi-info-circle me-2" aria-hidden="true"></span>
+        <strong>Select an organization</strong> to view and create projects. Use the dropdown above to choose an organization.
+    </div>
+}
 
 @if (isLoading)
 {
-    <div class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-        <p class="mt-2 text-muted">Loading projects...</p>
-    </div>
+    <LoadingSpinner Message="Loading projects..." 
+                   Size="LoadingSpinner.LoadingSize.Large" 
+                   AccessibleLabel="Loading project information" />
 }
 else if (projects?.Any() == true)
 {
@@ -41,14 +94,31 @@ else if (projects?.Any() == true)
                                 @project.Name
                             </a>
                         </h5>
+                        @if (selectedOrganization == null && !string.IsNullOrEmpty(project.OrganizationName))
+                        {
+                            <p class="text-muted small mb-2">
+                                <span class="bi bi-building me-1" aria-hidden="true"></span>
+                                @project.OrganizationName
+                            </p>
+                        }
                         <p class="card-text text-muted">@project.Description</p>
-                        <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
                             <small class="text-muted">
                                 Created @project.CreatedAt.ToString("MMM dd, yyyy")
                             </small>
                             <span class="badge bg-@(project.IsActive ? "success" : "secondary")">
                                 @(project.IsActive ? "Active" : "Inactive")
                             </span>
+                        </div>
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <small class="text-muted">Tickets</small>
+                                <div class="fw-bold">@project.TicketCount</div>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Members</small>
+                                <div class="fw-bold">@project.Members.Count</div>
+                            </div>
                         </div>
                     </div>
                     <div class="card-footer bg-transparent">
@@ -94,20 +164,14 @@ else
             <div class="modal-body">
                 @if (!string.IsNullOrEmpty(errorMessage))
                 {
-                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                        @errorMessage
-                        @if (errorMessage.Contains("session has expired"))
-                        {
-                            <br/>
-                            <a href="/Account/Login" class="btn btn-primary btn-sm mt-2">
-                                <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login Again
-                            </a>
-                            <button type="button" class="btn btn-secondary btn-sm mt-2 ms-2" @onclick="RefreshPage">
-                                <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Refresh Page
-                            </button>
-                        }
-                        <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
-                    </div>
+                    <NotificationAlert Type="NotificationAlert.NotificationType.Error"
+                                     Title="Error"
+                                     Message="@errorMessage"
+                                     IsVisible="@(!string.IsNullOrEmpty(errorMessage))"
+                                     OnDismiss="@(() => errorMessage = null)"
+                                     ShowActionButton="@errorMessage.Contains("session has expired")"
+                                     ActionText="@(errorMessage.Contains("session has expired") ? "Login Again" : "")"
+                                     OnActionClick="@RefreshPage" />
                 }
                 
                 <EditForm Model="projectForm" OnValidSubmit="SaveProject">
@@ -126,12 +190,51 @@ else
                         <ValidationMessage For="@(() => projectForm.Description)" />
                     </div>
 
+                    @if (!isEditMode)
+                    {
+                        <div class="mb-3">
+                            <label for="organizationSelect" class="form-label">Organization</label>
+                            @if (userOrganizations?.Any() == true)
+                            {
+                                <InputSelect id="organizationSelect" class="form-select" @bind-Value="projectForm.OrganizationIdString">
+                                    <option value="">Select an organization...</option>
+                                    @foreach (var org in userOrganizations)
+                                    {
+                                        <option value="@org.OrganizationId.ToString()">@org.OrganizationDisplayName</option>
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="@(() => projectForm.OrganizationId)" />
+                            }
+                            else
+                            {
+                                <div class="alert alert-warning">
+                                    <span class="bi bi-exclamation-triangle me-2" aria-hidden="true"></span>
+                                    No organizations available. Please create an organization first.
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (selectedOrganization != null)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Organization</label>
+                            <div class="form-control-plaintext bg-light p-2 rounded">
+                                <span class="bi bi-building me-2" aria-hidden="true"></span>
+                                @selectedOrganization.OrganizationDisplayName
+                            </div>
+                            <div class="form-text">This project belongs to the selected organization.</div>
+                        </div>
+                    }
+
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" @onclick="HideProjectModal">Cancel</button>
                         <button type="submit" class="btn btn-primary" disabled="@isSaving">
                             @if (isSaving)
                             {
-                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                <LoadingSpinner ShowIcon="true" 
+                                              Size="LoadingSpinner.LoadingSize.Small" 
+                                              Center="false" 
+                                              CssClass="d-inline-flex me-2" />
                             }
                             @(isEditMode ? "Update Project" : "Create Project")
                         </button>
@@ -144,7 +247,10 @@ else
 }
 
 @code {
+    private List<ProjectDto>? allProjects;
     private List<ProjectDto>? projects;
+    private List<UserOrganizationDto>? userOrganizations;
+    private UserOrganizationDto? selectedOrganization;
     private bool isLoading = true;
     private bool showProjectModal = false;
     private bool isEditMode = false;
@@ -164,7 +270,47 @@ else
                 string.Join(", ", authState.User.Claims.Select(c => $"{c.Type}={c.Value}")));
         }
         
+        await LoadUserOrganizations();
         await LoadProjects();
+    }
+
+    private async Task LoadUserOrganizations()
+    {
+        try
+        {
+            Logger.LogInformation("Loading user organizations for Projects page...");
+            var response = await ApiClient.GetOrganizationsWithRolesAsync();
+            Logger.LogInformation("Response received: Success={Success}, Data={HasData}, Count={Count}", 
+                response?.Success, 
+                response?.Data != null,
+                response?.Data?.Count ?? 0);
+                
+            if (response?.Success == true && response.Data != null)
+            {
+                userOrganizations = response.Data
+                    .Where(o => o.IsActive)
+                    .OrderBy(o => o.OrganizationDisplayName)
+                    .ToList();
+
+                Logger.LogInformation("Loaded {Count} active organizations", userOrganizations.Count);
+                
+                // Auto-select first organization if only one available
+                if (userOrganizations.Count == 1)
+                {
+                    selectedOrganization = userOrganizations.First();
+                }
+            }
+            else
+            {
+                userOrganizations = new List<UserOrganizationDto>();
+                Logger.LogWarning("Failed to load organizations or no organizations found");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading user organizations");
+            userOrganizations = new List<UserOrganizationDto>();
+        }
     }
 
     private async Task LoadProjects()
@@ -179,19 +325,22 @@ else
             
             if (response?.Success == true && response.Data != null)
             {
-                projects = response.Data.OrderByDescending(p => p.CreatedAt).ToList();
-                Logger.LogInformation("Loaded {ProjectCount} projects successfully", projects.Count);
+                allProjects = response.Data.OrderByDescending(p => p.CreatedAt).ToList();
+                FilterProjectsByOrganization();
+                Logger.LogInformation("Loaded {ProjectCount} projects successfully", allProjects.Count);
             }
             else
             {
                 Logger.LogWarning("Failed to load projects. Response Success: {Success}, Has Data: {HasData}, Message: {Message}", 
                     response?.Success, response?.Data != null, response?.Message);
+                allProjects = new List<ProjectDto>();
                 projects = new List<ProjectDto>();
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error loading projects");
+            allProjects = new List<ProjectDto>();
             projects = new List<ProjectDto>();
         }
         finally
@@ -201,11 +350,50 @@ else
         }
     }
 
+    private void FilterProjectsByOrganization()
+    {
+        if (allProjects == null)
+        {
+            projects = new List<ProjectDto>();
+            return;
+        }
+
+        if (selectedOrganization == null)
+        {
+            projects = allProjects.ToList();
+        }
+        else
+        {
+            projects = allProjects
+                .Where(p => p.OrganizationId == selectedOrganization.OrganizationId)
+                .ToList();
+        }
+    }
+
+    private async Task FilterByOrganization(UserOrganizationDto? organization)
+    {
+        selectedOrganization = organization;
+        FilterProjectsByOrganization();
+        StateHasChanged();
+    }
+
     private void ShowCreateProjectModal()
     {
         Logger.LogInformation("ShowCreateProjectModal called");
+        Logger.LogInformation("Available organizations: {Count}", userOrganizations?.Count ?? 0);
+        
         isEditMode = false;
         projectForm = new ProjectFormModel();
+        
+        // Pre-select the first organization if available
+        var firstOrg = userOrganizations?.FirstOrDefault();
+        if (firstOrg != null)
+        {
+            projectForm.OrganizationId = firstOrg.OrganizationId;
+            Logger.LogInformation("Pre-selected organization: {OrgName} ({OrgId})", 
+                firstOrg.OrganizationDisplayName, firstOrg.OrganizationId);
+        }
+        
         currentProject = null;
         errorMessage = null;
         showProjectModal = true;
@@ -279,9 +467,16 @@ else
             }
             else
             {
-                Logger.LogInformation("Creating new project with name: {Name}", projectForm.Name);
+                if (!projectForm.OrganizationId.HasValue)
+                {
+                    errorMessage = "Please select an organization to create the project.";
+                    return;
+                }
+
+                Logger.LogInformation("Creating new project with name: {Name} in organization: {OrganizationId}", projectForm.Name, projectForm.OrganizationId);
                 var createDto = new CreateProjectDto
                 {
+                    OrganizationId = projectForm.OrganizationId.Value,
                     Name = projectForm.Name,
                     Description = projectForm.Description
                 };
@@ -325,5 +520,27 @@ else
 
         [StringLength(2000)]
         public string Description { get; set; } = string.Empty;
+
+        private Guid? _organizationId;
+        
+        [Required(ErrorMessage = "Please select an organization")]
+        public Guid? OrganizationId 
+        { 
+            get => _organizationId;
+            set => _organizationId = value;
+        }
+        
+        // Helper property for InputSelect binding with string values
+        public string OrganizationIdString
+        {
+            get => _organizationId?.ToString() ?? "";
+            set 
+            {
+                if (Guid.TryParse(value, out var guid))
+                    _organizationId = guid;
+                else
+                    _organizationId = null;
+            }
+        }
     }
 }

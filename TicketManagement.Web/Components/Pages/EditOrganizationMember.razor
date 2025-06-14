@@ -1,0 +1,423 @@
+@page "/organizations/{organizationId:guid}/members/{userId}/edit"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.Components.Authorization
+@using TicketManagement.Core.Enums
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@inject ILogger<EditOrganizationMember> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Edit Member - @(organization?.DisplayName ?? "Organization") - Ticket Management</PageTitle>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading member details...</p>
+    </div>
+}
+else if (organization != null && member != null && user != null)
+{
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+                    <li class="breadcrumb-item"><a href="/organizations/@OrganizationId">@organization.DisplayName</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Edit Member</li>
+                </ol>
+            </nav>
+
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Edit Member Role</h4>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            @errorMessage
+                            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(successMessage))
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            @successMessage
+                            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+                        </div>
+                    }
+
+                    <!-- Member Info -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">Member Information</h6>
+                                    <div class="mb-2">
+                                        <strong>Name:</strong> @(user.DisplayName ?? user.Username)
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Email:</strong> @user.Email
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Username:</strong> @user.Username
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Current Role:</strong> 
+                                        <span class="badge bg-@GetRoleBadgeColor(member.Role)">@member.Role.ToString()</span>
+                                    </div>
+                                    <div>
+                                        <strong>Joined:</strong> @member.JoinedAt.ToString("MMM dd, yyyy")
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">Organization Information</h6>
+                                    <div class="mb-2">
+                                        <strong>Organization:</strong> @organization.DisplayName
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Total Members:</strong> @organization.CurrentMembers
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>Total Projects:</strong> @organization.CurrentProjects
+                                    </div>
+                                    <div>
+                                        <strong>Status:</strong>
+                                        <span class="badge bg-@(organization.IsActive ? "success" : "secondary")">
+                                            @(organization.IsActive ? "Active" : "Inactive")
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <EditForm Model="roleForm" OnValidSubmit="UpdateMemberRole">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label for="memberRole" class="form-label">New Role</label>
+                            <InputSelect id="memberRole" class="form-select" @bind-Value="roleForm.Role">
+                                <option value="@OrganizationRole.Viewer">Viewer - Can view organization and projects</option>
+                                <option value="@OrganizationRole.Member">Member - Can create and manage assigned tickets</option>
+                                <option value="@OrganizationRole.Manager">Manager - Can manage projects and members</option>
+                                <option value="@OrganizationRole.Admin">Admin - Full organization access</option>
+                            </InputSelect>
+                            <ValidationMessage For="@(() => roleForm.Role)" />
+                            <div class="form-text">
+                                Select the new role for this member. This will change their permissions within the organization.
+                            </div>
+                        </div>
+
+                        <!-- Role Descriptions -->
+                        <div class="mb-4">
+                            <h6>Role Descriptions:</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="small">
+                                        <div class="mb-2">
+                                            <span class="badge bg-secondary me-2">Viewer</span>
+                                            View organization, projects, and tickets
+                                        </div>
+                                        <div class="mb-2">
+                                            <span class="badge bg-primary me-2">Member</span>
+                                            Create tickets, add comments, manage assigned tickets
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="small">
+                                        <div class="mb-2">
+                                            <span class="badge bg-warning me-2">Manager</span>
+                                            Manage projects, assign tickets, add/remove project members
+                                        </div>
+                                        <div class="mb-2">
+                                            <span class="badge bg-danger me-2">Admin</span>
+                                            Full organization access, manage all members and settings
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="/organizations/@OrganizationId" class="btn btn-secondary">
+                                <span class="bi bi-arrow-left" aria-hidden="true"></span> Back
+                            </a>
+                            <div>
+                                <button type="button" class="btn btn-outline-danger me-2" @onclick="ShowRemoveConfirmation" 
+                                        disabled="@(member.UserId == currentUserId)">
+                                    <span class="bi bi-person-dash" aria-hidden="true"></span> Remove Member
+                                </button>
+                                <button type="submit" class="btn btn-primary" disabled="@(roleForm.Role == member.Role || isSaving)">
+                                    @if (isSaving)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    }
+                                    <span class="bi bi-check-circle" aria-hidden="true"></span> Update Role
+                                </button>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <span class="bi bi-exclamation-triangle fs-1 text-warning d-block mb-3" aria-hidden="true"></span>
+        <h3>Member not found</h3>
+        <p class="text-muted">The member you're looking for doesn't exist or you don't have permission to manage them.</p>
+        <a href="/organizations/@OrganizationId" class="btn btn-primary">
+            <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Organization
+        </a>
+    </div>
+}
+
+<!-- Remove Confirmation Modal -->
+@if (showRemoveConfirmation)
+{
+    <div class="modal fade show" style="display: block; background-color: rgba(0,0,0,0.5);" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Member Removal</h5>
+                    <button type="button" class="btn-close" @onclick="HideRemoveConfirmation"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <span class="bi bi-exclamation-triangle" aria-hidden="true"></span>
+                        <strong>Warning!</strong> This action cannot be undone.
+                    </div>
+                    <p>Are you sure you want to remove <strong>@(user?.DisplayName ?? user?.Username)</strong> from this organization?</p>
+                    <p>This member will lose access to:</p>
+                    <ul>
+                        <li>All organization projects</li>
+                        <li>Assigned tickets within the organization</li>
+                        <li>Organization settings and information</li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="HideRemoveConfirmation">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="RemoveMember" disabled="@isRemoving">
+                        @if (isRemoving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        }
+                        Remove Member
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid OrganizationId { get; set; }
+    [Parameter] public string UserId { get; set; } = string.Empty;
+
+    private OrganizationDto? organization;
+    private OrganizationMemberDto? member;
+    private UserDto? user;
+    private bool isLoading = true;
+    private bool isSaving = false;
+    private bool isRemoving = false;
+    private bool showRemoveConfirmation = false;
+    private string? errorMessage;
+    private string? successMessage;
+    private string? currentUserId;
+    private RoleFormModel roleForm = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCurrentUser();
+        await LoadData();
+    }
+
+    private async Task LoadCurrentUser()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            currentUserId = authState.User.FindFirst("sub")?.Value 
+                           ?? authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading current user");
+        }
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            // Load organization
+            var orgResponse = await ApiClient.GetOrganizationAsync(OrganizationId);
+            if (orgResponse?.Success == true)
+            {
+                organization = orgResponse.Data;
+            }
+
+            // Load organization members to find the specific member
+            var membersResponse = await ApiClient.GetOrganizationMembersAsync(OrganizationId);
+            if (membersResponse?.Success == true)
+            {
+                member = membersResponse.Data?.FirstOrDefault(m => m.UserId == UserId);
+            }
+
+            // Load user details
+            if (member != null)
+            {
+                var userResponse = await ApiClient.GetUserAsync(UserId);
+                if (userResponse?.Success == true)
+                {
+                    user = userResponse.Data;
+                    roleForm.Role = member.Role;
+                }
+            }
+
+            if (organization == null || member == null || user == null)
+            {
+                Logger.LogWarning("Failed to load data for organization {OrganizationId}, user {UserId}", 
+                    OrganizationId, UserId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading data for organization {OrganizationId}, user {UserId}", 
+                OrganizationId, UserId);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateMemberRole()
+    {
+        if (member == null || roleForm.Role == member.Role) return;
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var updateDto = new UpdateOrganizationMemberDto
+            {
+                Role = roleForm.Role
+            };
+
+            var response = await ApiClient.UpdateOrganizationMemberRoleAsync(OrganizationId, UserId, updateDto);
+            
+            if (response?.Success == true)
+            {
+                successMessage = $"Successfully updated role to {roleForm.Role}.";
+                member.Role = roleForm.Role; // Update local state
+                
+                // Navigate back after a short delay
+                await Task.Delay(2000);
+                Navigation.NavigateTo($"/organizations/{OrganizationId}");
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to update member role. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating member role for organization {OrganizationId}, user {UserId}", 
+                OrganizationId, UserId);
+            errorMessage = "An unexpected error occurred. Please try again.";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowRemoveConfirmation()
+    {
+        showRemoveConfirmation = true;
+        StateHasChanged();
+    }
+
+    private void HideRemoveConfirmation()
+    {
+        showRemoveConfirmation = false;
+        StateHasChanged();
+    }
+
+    private async Task RemoveMember()
+    {
+        if (member == null) return;
+
+        isRemoving = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await ApiClient.RemoveOrganizationMemberAsync(OrganizationId, UserId);
+            
+            if (response?.Success == true)
+            {
+                Navigation.NavigateTo($"/organizations/{OrganizationId}");
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to remove member. Please try again.";
+                HideRemoveConfirmation();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error removing member from organization {OrganizationId}, user {UserId}", 
+                OrganizationId, UserId);
+            errorMessage = "An unexpected error occurred. Please try again.";
+            HideRemoveConfirmation();
+        }
+        finally
+        {
+            isRemoving = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetRoleBadgeColor(OrganizationRole role)
+    {
+        return role switch
+        {
+            OrganizationRole.Admin => "danger",
+            OrganizationRole.Manager => "warning",
+            OrganizationRole.Member => "primary",
+            OrganizationRole.Viewer => "secondary",
+            _ => "secondary"
+        };
+    }
+
+    private class RoleFormModel
+    {
+        [Required]
+        public OrganizationRole Role { get; set; } = OrganizationRole.Member;
+    }
+}

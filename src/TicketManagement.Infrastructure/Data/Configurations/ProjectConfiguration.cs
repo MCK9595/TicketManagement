@@ -23,6 +23,12 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
             .IsRequired()
             .HasMaxLength(100);
 
+        // Organization relationship
+        builder.HasOne(p => p.Organization)
+            .WithMany(o => o.Projects)
+            .HasForeignKey(p => p.OrganizationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.HasMany(p => p.Members)
             .WithOne(m => m.Project)
             .HasForeignKey(m => m.ProjectId)
@@ -38,6 +44,8 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.HasIndex(p => p.IsActive).HasDatabaseName("IX_Projects_IsActive");
         builder.HasIndex(p => p.CreatedBy).HasDatabaseName("IX_Projects_CreatedBy");
         builder.HasIndex(p => p.Name).HasDatabaseName("IX_Projects_Name");
+        builder.HasIndex(p => p.OrganizationId).HasDatabaseName("IX_Projects_OrganizationId");
         builder.HasIndex(p => new { p.IsActive, p.CreatedAt }).HasDatabaseName("IX_Projects_IsActive_CreatedAt");
+        builder.HasIndex(p => new { p.OrganizationId, p.IsActive }).HasDatabaseName("IX_Projects_OrganizationId_IsActive");
     }
 }

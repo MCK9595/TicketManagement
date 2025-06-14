@@ -1,0 +1,345 @@
+@page "/organizations/{organizationId:guid}/members/add"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.Components.Authorization
+@using TicketManagement.Core.Enums
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@inject ILogger<AddOrganizationMember> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Add Member - @(organization?.DisplayName ?? "Organization") - Ticket Management</PageTitle>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading organization details...</p>
+    </div>
+}
+else if (organization != null)
+{
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+                    <li class="breadcrumb-item"><a href="/organizations/@OrganizationId">@organization.DisplayName</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Add Member</li>
+                </ol>
+            </nav>
+
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Add Member to @organization.DisplayName</h4>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            @errorMessage
+                            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(successMessage))
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            @successMessage
+                            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+                        </div>
+                    }
+
+                    <EditForm Model="memberForm" OnValidSubmit="AddMember">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label for="userSearch" class="form-label">Search User</label>
+                            <div class="input-group">
+                                <InputText id="userSearch" class="form-control" @bind-Value="searchTerm" 
+                                         @onkeyup="OnSearchKeyUp" placeholder="Enter username or email to search..." />
+                                <button class="btn btn-outline-secondary" type="button" @onclick="SearchUsers" disabled="@isSearching">
+                                    @if (isSearching)
+                                    {
+                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    }
+                                    else
+                                    {
+                                        <span class="bi bi-search" aria-hidden="true"></span>
+                                    }
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (searchResults?.Any() == true)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Search Results</label>
+                                <div class="list-group" style="max-height: 300px; overflow-y: auto;">
+                                    @foreach (var user in searchResults)
+                                    {
+                                        <button type="button" 
+                                                class="list-group-item list-group-item-action @(selectedUser?.Id == user.Id ? "active" : "")"
+                                                @onclick="() => SelectUser(user)">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <div class="fw-medium">@(user.DisplayName ?? user.Username)</div>
+                                                    <small class="text-muted">@user.Email</small>
+                                                </div>
+                                                @if (selectedUser?.Id == user.Id)
+                                                {
+                                                    <span class="bi bi-check-circle-fill text-success" aria-hidden="true"></span>
+                                                }
+                                            </div>
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        @if (selectedUser != null)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Selected User</label>
+                                <div class="card bg-light">
+                                    <div class="card-body py-2">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <div class="fw-medium">@(selectedUser.DisplayName ?? selectedUser.Username)</div>
+                                                <small class="text-muted">@selectedUser.Email</small>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="ClearSelectedUser">
+                                                <span class="bi bi-x" aria-hidden="true"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="memberRole" class="form-label">Role</label>
+                                <InputSelect id="memberRole" class="form-select" @bind-Value="memberForm.Role">
+                                    <option value="@OrganizationRole.Viewer">Viewer - Can view organization and projects</option>
+                                    <option value="@OrganizationRole.Member">Member - Can create and manage assigned tickets</option>
+                                    <option value="@OrganizationRole.Manager">Manager - Can manage projects and members</option>
+                                    <option value="@OrganizationRole.Admin">Admin - Full organization access</option>
+                                </InputSelect>
+                                <ValidationMessage For="@(() => memberForm.Role)" />
+                            </div>
+                        }
+
+                        <div class="d-flex justify-content-between">
+                            <a href="/organizations/@OrganizationId" class="btn btn-secondary">
+                                <span class="bi bi-arrow-left" aria-hidden="true"></span> Back
+                            </a>
+                            <button type="submit" class="btn btn-primary" disabled="@(selectedUser == null || isSaving)">
+                                @if (isSaving)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                <span class="bi bi-person-plus" aria-hidden="true"></span> Add Member
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <span class="bi bi-exclamation-triangle fs-1 text-warning d-block mb-3" aria-hidden="true"></span>
+        <h3>Organization not found</h3>
+        <p class="text-muted">The organization you're looking for doesn't exist or you don't have permission to view it.</p>
+        <a href="/organizations" class="btn btn-primary">
+            <span class="bi bi-arrow-left" aria-hidden="true"></span> Back to Organizations
+        </a>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid OrganizationId { get; set; }
+
+    private OrganizationDto? organization;
+    private List<UserDto>? searchResults;
+    private UserDto? selectedUser;
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private bool isSearching = false;
+    private bool isSaving = false;
+    private string? errorMessage;
+    private string? successMessage;
+    private AddMemberFormModel memberForm = new();
+    private Timer? searchTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOrganization();
+    }
+
+    private async Task LoadOrganization()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await ApiClient.GetOrganizationAsync(OrganizationId);
+            if (response?.Success == true)
+            {
+                organization = response.Data;
+            }
+            else
+            {
+                Logger.LogWarning("Failed to load organization {OrganizationId}: {Message}", 
+                    OrganizationId, response?.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading organization {OrganizationId}", OrganizationId);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchUsers();
+        }
+        else
+        {
+            // Debounce search
+            searchTimer?.Dispose();
+            searchTimer = new Timer(async _ =>
+            {
+                await InvokeAsync(SearchUsers);
+            }, null, 500, Timeout.Infinite);
+        }
+    }
+
+    private async Task SearchUsers()
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Length < 2)
+        {
+            searchResults = null;
+            StateHasChanged();
+            return;
+        }
+
+        isSearching = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await ApiClient.SearchUsersAsync(searchTerm);
+            if (response?.Success == true)
+            {
+                searchResults = response.Data?.ToList() ?? new List<UserDto>();
+            }
+            else
+            {
+                searchResults = new List<UserDto>();
+                if (!string.IsNullOrEmpty(response?.Message))
+                {
+                    errorMessage = response.Message;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error searching users with term: {SearchTerm}", searchTerm);
+            searchResults = new List<UserDto>();
+            errorMessage = "Error searching users. Please try again.";
+        }
+        finally
+        {
+            isSearching = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SelectUser(UserDto user)
+    {
+        selectedUser = user;
+        searchResults = null;
+        searchTerm = string.Empty;
+        errorMessage = null;
+        StateHasChanged();
+    }
+
+    private void ClearSelectedUser()
+    {
+        selectedUser = null;
+        StateHasChanged();
+    }
+
+    private async Task AddMember()
+    {
+        if (selectedUser == null) return;
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var addMemberDto = new AddOrganizationMemberDto
+            {
+                UserId = selectedUser.Id,
+                Role = memberForm.Role
+            };
+
+            var response = await ApiClient.AddOrganizationMemberAsync(OrganizationId, addMemberDto);
+            
+            if (response?.Success == true)
+            {
+                successMessage = $"Successfully added {selectedUser.DisplayName ?? selectedUser.Username} to the organization.";
+                
+                // Clear form after successful addition
+                selectedUser = null;
+                memberForm = new AddMemberFormModel();
+                
+                // Navigate back after a short delay
+                await Task.Delay(2000);
+                Navigation.NavigateTo($"/organizations/{OrganizationId}");
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to add member. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error adding member to organization {OrganizationId}", OrganizationId);
+            errorMessage = "An unexpected error occurred. Please try again.";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        searchTimer?.Dispose();
+    }
+
+    private class AddMemberFormModel
+    {
+        [Required]
+        public OrganizationRole Role { get; set; } = OrganizationRole.Member;
+    }
+}

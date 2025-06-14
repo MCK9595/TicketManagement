@@ -52,6 +52,8 @@ public class ProjectsController : ControllerBase
             var projectDtos = projects.Select(p => new ProjectDto
             {
                 Id = p.Id,
+                OrganizationId = p.OrganizationId,
+                OrganizationName = p.Organization?.Name ?? string.Empty,
                 Name = p.Name,
                 Description = p.Description,
                 CreatedAt = p.CreatedAt,
@@ -116,6 +118,7 @@ public class ProjectsController : ControllerBase
             var projectDto = new ProjectDto
             {
                 Id = project.Id,
+                OrganizationId = project.OrganizationId,
                 Name = project.Name,
                 Description = project.Description,
                 CreatedAt = project.CreatedAt,
@@ -169,12 +172,14 @@ public class ProjectsController : ControllerBase
             }
 
             var userId = GetCurrentUserId();
-            _logger.LogInformation("Creating project for user: {UserId}", userId);
-            var project = await _projectService.CreateProjectAsync(dto.Name, dto.Description, userId);
+            _logger.LogInformation("Creating project for user: {UserId} in organization: {OrganizationId}", userId, dto.OrganizationId);
+            var project = await _projectService.CreateProjectAsync(dto.OrganizationId, dto.Name, dto.Description, userId);
 
             var projectDto = new ProjectDto
             {
                 Id = project.Id,
+                OrganizationId = project.OrganizationId,
+                OrganizationName = project.Organization?.Name ?? string.Empty,
                 Name = project.Name,
                 Description = project.Description,
                 CreatedAt = project.CreatedAt,

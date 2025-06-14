@@ -1,0 +1,109 @@
+@using TicketManagement.Contracts.DTOs
+@using TicketManagement.Core.Enums
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<div class="card h-100">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1">
+                <h6 class="card-title mb-1">@(Member.UserName ?? Member.UserId)</h6>
+                <p class="card-text text-muted small mb-2">@Member.UserEmail</p>
+                <span class="badge bg-@GetRoleBadgeColor(Member.Role) mb-2">
+                    @Member.Role.ToString()
+                </span>
+                <div class="small text-muted">
+                    <div>Joined @Member.JoinedAt.ToString("MMM yyyy")</div>
+                    @if (Member.LastAccessedAt.HasValue)
+                    {
+                        <div>Last seen @Member.LastAccessedAt.Value.ToString("MMM dd, yyyy")</div>
+                    }
+                </div>
+            </div>
+            @if (ShowActions && CanManageMember)
+            {
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        <span class="bi bi-three-dots" aria-hidden="true"></span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li>
+                            <button class="dropdown-item" @onclick="() => OnEditMember.InvokeAsync(Member)">
+                                <span class="bi bi-pencil me-2" aria-hidden="true"></span>Edit Role
+                            </button>
+                        </li>
+                        @if (!IsCurrentUser && CanRemoveMember)
+                        {
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item text-danger" @onclick="() => OnRemoveMember.InvokeAsync(Member)">
+                                    <span class="bi bi-person-dash me-2" aria-hidden="true"></span>Remove Member
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    </div>
+    @if (ShowProjectInfo && Member.UserEmail != null)
+    {
+        <div class="card-footer bg-transparent">
+            <div class="d-flex justify-content-between text-muted small">
+                <span>
+                    <span class="bi bi-folder me-1" aria-hidden="true"></span>
+                    @ProjectCount Projects
+                </span>
+                <span>
+                    <span class="bi bi-clipboard-data me-1" aria-hidden="true"></span>
+                    @TicketCount Tickets
+                </span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public OrganizationMemberDto Member { get; set; } = null!;
+    [Parameter] public bool ShowActions { get; set; } = true;
+    [Parameter] public bool ShowProjectInfo { get; set; } = false;
+    [Parameter] public int ProjectCount { get; set; } = 0;
+    [Parameter] public int TicketCount { get; set; } = 0;
+    [Parameter] public OrganizationRole CurrentUserRole { get; set; } = OrganizationRole.Viewer;
+    [Parameter] public string? CurrentUserId { get; set; }
+    [Parameter] public EventCallback<OrganizationMemberDto> OnEditMember { get; set; }
+    [Parameter] public EventCallback<OrganizationMemberDto> OnRemoveMember { get; set; }
+
+    private bool IsCurrentUser => Member.UserId == CurrentUserId;
+
+    private bool CanManageMember
+    {
+        get
+        {
+            // Can manage if current user is Admin or Manager
+            return CurrentUserRole == OrganizationRole.Admin || CurrentUserRole == OrganizationRole.Manager;
+        }
+    }
+
+    private bool CanRemoveMember
+    {
+        get
+        {
+            // Only Admins can remove members, and cannot remove themselves
+            return CurrentUserRole == OrganizationRole.Admin && !IsCurrentUser;
+        }
+    }
+
+    private string GetRoleBadgeColor(OrganizationRole role)
+    {
+        return role switch
+        {
+            OrganizationRole.Admin => "danger",
+            OrganizationRole.Manager => "warning",
+            OrganizationRole.Member => "primary",
+            OrganizationRole.Viewer => "secondary",
+            _ => "secondary"
+        };
+    }
+}

@@ -7,6 +7,8 @@ namespace TicketManagement.Contracts.DTOs;
 public class ProjectDto
 {
     public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public string OrganizationName { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
@@ -18,6 +20,9 @@ public class ProjectDto
 
 public class CreateProjectDto
 {
+    [Required]
+    public Guid OrganizationId { get; set; }
+
     [Required]
     [ProjectName]
     public string Name { get; set; } = string.Empty;

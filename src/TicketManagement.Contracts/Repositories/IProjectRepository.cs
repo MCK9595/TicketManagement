@@ -5,6 +5,7 @@ namespace TicketManagement.Contracts.Repositories;
 public interface IProjectRepository : IRepository<Project, Guid>
 {
     Task<IEnumerable<Project>> GetProjectsByUserIdAsync(string userId);
+    Task<IEnumerable<Project>> GetProjectsByOrganizationIdAsync(Guid organizationId);
     Task<IEnumerable<Project>> GetActiveProjectsAsync();
     Task<Project?> GetProjectWithMembersAsync(Guid projectId);
     Task<Project?> GetProjectWithTicketsAsync(Guid projectId);

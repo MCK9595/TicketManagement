@@ -7,5 +7,8 @@ public enum NotificationType
     StatusChanged = 2,
     MentionedInComment = 3,
     TicketDeleted = 4,
-    ProjectDeleted = 5
+    ProjectDeleted = 5,
+    ProjectMember = 6,
+    OrganizationMember = 7,
+    OrganizationDeleted = 8
 }
