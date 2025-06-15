@@ -202,11 +202,23 @@ public class TicketServiceTests
         var newStatus = TicketStatus.InProgress;
         var updatedBy = "updater";
 
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(ticket);
 
-        _mockTicketRepository.Setup(r => r.UpdateAsync(It.IsAny<Ticket>()))
-            .ReturnsAsync((Ticket t) => t);
+        var updatedTicket = new Ticket
+        {
+            Id = ticketId,
+            ProjectId = ticket.ProjectId,
+            Title = ticket.Title,
+            Status = newStatus,
+            CreatedBy = ticket.CreatedBy,
+            CreatedAt = ticket.CreatedAt,
+            UpdatedBy = updatedBy,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        _mockTicketRepository.Setup(r => r.UpdateStatusAsync(ticketId, newStatus, updatedBy))
+            .ReturnsAsync(updatedTicket);
 
         // Act
         var result = await _service.UpdateTicketStatusAsync(ticketId, newStatus, updatedBy);
@@ -216,8 +228,7 @@ public class TicketServiceTests
         Assert.That(result.Status, Is.EqualTo(newStatus));
         Assert.That(result.UpdatedBy, Is.EqualTo(updatedBy));
 
-        _mockTicketRepository.Verify(r => r.UpdateAsync(It.Is<Ticket>(t => 
-            t.Status == newStatus)), Times.Once);
+        _mockTicketRepository.Verify(r => r.UpdateStatusAsync(ticketId, newStatus, updatedBy), Times.Once);
     }
 
     [Test]
@@ -238,7 +249,7 @@ public class TicketServiceTests
         var invalidStatus = TicketStatus.Open;
         var updatedBy = "updater";
 
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(ticket);
 
         // Act & Assert
@@ -272,7 +283,7 @@ public class TicketServiceTests
             AssignedAt = DateTime.UtcNow
         };
 
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(ticket);
 
         _mockAssignmentRepository.Setup(r => r.GetActiveAssignmentAsync(ticketId, assigneeId))
@@ -281,7 +292,7 @@ public class TicketServiceTests
         _mockAssignmentRepository.Setup(r => r.AddAsync(It.IsAny<TicketAssignment>()))
             .ReturnsAsync(expectedAssignment);
 
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(ticket);
 
         // Act
@@ -323,7 +334,7 @@ public class TicketServiceTests
             AssignedAt = DateTime.UtcNow.AddDays(-1)
         };
 
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(ticket);
 
         _mockAssignmentRepository.Setup(r => r.GetActiveAssignmentAsync(ticketId, assigneeId))
@@ -360,7 +371,7 @@ public class TicketServiceTests
             CreatedAt = DateTime.UtcNow
         };
 
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(ticket);
 
         _mockCommentRepository.Setup(r => r.AddAsync(It.IsAny<Comment>()))
@@ -388,7 +399,7 @@ public class TicketServiceTests
         var ticketId = Guid.NewGuid();
         var ticket = new Ticket { Id = ticketId, ProjectId = Guid.NewGuid(), Title = "Test", CreatedBy = "creator", CreatedAt = DateTime.UtcNow };
         
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(ticket);
 
         // Act & Assert
@@ -435,7 +446,7 @@ public class TicketServiceTests
             CreatedAt = DateTime.UtcNow
         };
 
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(ticket);
 
         _mockProjectRepository.Setup(r => r.IsUserMemberOfProjectAsync(projectId, userId))
@@ -465,7 +476,7 @@ public class TicketServiceTests
             CreatedAt = DateTime.UtcNow
         };
 
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(ticket);
 
         _mockProjectRepository.Setup(r => r.IsUserMemberOfProjectAsync(projectId, userId))

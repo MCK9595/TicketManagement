@@ -9,8 +9,9 @@ public class CreateOrganizationDto
     [RegularExpression(@"^[a-zA-Z0-9_-]+$", ErrorMessage = "Organization name can only contain letters, numbers, hyphens, and underscores")]
     public string Name { get; set; } = string.Empty;
 
+    [Required]
     [StringLength(200)]
-    public string? DisplayName { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
 
     [StringLength(500)]
     public string? Description { get; set; }

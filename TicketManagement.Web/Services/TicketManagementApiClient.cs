@@ -498,6 +498,9 @@ public class TicketManagementApiClient
             var response = await _httpClient.PostAsJsonAsync("api/organizations", createOrganization);
             var content = await response.Content.ReadAsStringAsync();
             
+            // Log the request and response for debugging
+            Console.WriteLine($"CreateOrganization Response - Status: {response.StatusCode}, Content: {content}");
+            
             if (response.IsSuccessStatusCode)
             {
                 return JsonSerializer.Deserialize<ApiResponseDto<OrganizationDto>>(content, _jsonOptions);
@@ -508,15 +511,30 @@ public class TicketManagementApiClient
                 try
                 {
                     var errorResponse = JsonSerializer.Deserialize<ApiResponseDto<OrganizationDto>>(content, _jsonOptions);
+                    
+                    // Log error details
+                    if (errorResponse != null)
+                    {
+                        Console.WriteLine($"API Error - Success: {errorResponse.Success}, Message: {errorResponse.Message}");
+                        if (errorResponse.Errors?.Any() == true)
+                        {
+                            Console.WriteLine($"API Errors: {string.Join(", ", errorResponse.Errors)}");
+                        }
+                    }
+                    
                     return errorResponse;
                 }
-                catch
+                catch (JsonException jsonEx)
                 {
+                    Console.WriteLine($"Failed to parse error response: {jsonEx.Message}");
+                    Console.WriteLine($"Raw response content: {content}");
+                    
                     // If parsing fails, return a generic error
                     return new ApiResponseDto<OrganizationDto>
                     {
                         Success = false,
-                        Message = $"Request failed with status {response.StatusCode}: {response.ReasonPhrase}"
+                        Message = $"Request failed with status {response.StatusCode}: {response.ReasonPhrase}",
+                        Errors = new List<string> { content }
                     };
                 }
             }
@@ -527,7 +545,8 @@ public class TicketManagementApiClient
             return new ApiResponseDto<OrganizationDto>
             {
                 Success = false,
-                Message = "Network error occurred. Please check your connection and try again."
+                Message = "Network error occurred. Please check your connection and try again.",
+                Errors = new List<string> { ex.Message }
             };
         }
         catch (Exception ex)
@@ -673,7 +692,7 @@ public class TicketManagementApiClient
     {
         try
         {
-            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<UserDto>>>($"api/users/search?term={Uri.EscapeDataString(searchTerm)}", _jsonOptions);
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<UserDto>>>($"api/users/search?q={Uri.EscapeDataString(searchTerm)}", _jsonOptions);
         }
         catch (Exception)
         {
@@ -686,6 +705,140 @@ public class TicketManagementApiClient
         try
         {
             return await _httpClient.GetFromJsonAsync<ApiResponseDto<UserDto>>($"api/users/{userId}", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    // 新しいユーザー管理機能のメソッド
+
+    public async Task<ApiResponseDto<CreateUserResult>?> CreateUserAsync(CreateUserDto createUserDto)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("api/users", createUserDto, _jsonOptions);
+            return await response.Content.ReadFromJsonAsync<ApiResponseDto<CreateUserResult>>(_jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<InviteUserResult>?> InviteUserAsync(InviteUserDto inviteDto)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("api/users/invite", inviteDto, _jsonOptions);
+            return await response.Content.ReadFromJsonAsync<ApiResponseDto<InviteUserResult>>(_jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<CreateUserResult>?> CreateUserForOrganizationAsync(CreateUserForOrganizationDto createUserDto)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("api/users/create-for-organization", createUserDto, _jsonOptions);
+            return await response.Content.ReadFromJsonAsync<ApiResponseDto<CreateUserResult>>(_jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<ResetPasswordResult>?> ResetPasswordAsync(string userId, bool temporary = true)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsync($"api/users/{userId}/reset-password?temporary={temporary}", null);
+            return await response.Content.ReadFromJsonAsync<ApiResponseDto<ResetPasswordResult>>(_jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<bool>?> UpdateUserRoleAsync(string userId, UpdateUserRoleDto updateDto)
+    {
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync($"api/users/{userId}/role", updateDto, _jsonOptions);
+            return await response.Content.ReadFromJsonAsync<ApiResponseDto<bool>>(_jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<bool>?> GrantSystemAdminAsync(string userId, GrantSystemAdminDto grantDto)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"api/users/{userId}/grant-system-admin", grantDto, _jsonOptions);
+            return await response.Content.ReadFromJsonAsync<ApiResponseDto<bool>>(_jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<bool>?> RevokeSystemAdminAsync(string userId)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync($"api/users/{userId}/revoke-system-admin");
+            return await response.Content.ReadFromJsonAsync<ApiResponseDto<bool>>(_jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<List<SystemAdminDto>>?> GetSystemAdminsAsync()
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<SystemAdminDto>>>("api/users/system-admins", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<bool>?> IsSystemAdminAsync(string userId)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<bool>>($"api/users/{userId}/is-system-admin", _jsonOptions);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<bool>?> IsOrganizationAdminAsync(string userId, Guid? organizationId = null)
+    {
+        try
+        {
+            var url = $"api/users/{userId}/is-organization-admin";
+            if (organizationId.HasValue)
+            {
+                url += $"?organizationId={organizationId}";
+            }
+            return await _httpClient.GetFromJsonAsync<ApiResponseDto<bool>>(url, _jsonOptions);
         }
         catch (Exception)
         {

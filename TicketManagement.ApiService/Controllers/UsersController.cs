@@ -36,7 +36,7 @@ public class UsersController : ControllerBase
                 return NotFound(ApiResponseDto<UserDto>.ErrorResult("User not found"));
             }
 
-            return ApiResponseDto<UserDto>.SuccessResult(user);
+            return Ok(ApiResponseDto<UserDto>.SuccessResult(user));
         }
         catch (Exception ex)
         {
@@ -70,7 +70,7 @@ public class UsersController : ControllerBase
                 return NotFound(ApiResponseDto<UserDetailDto>.ErrorResult("User details not found"));
             }
 
-            return ApiResponseDto<UserDetailDto>.SuccessResult(userDetail);
+            return Ok(ApiResponseDto<UserDetailDto>.SuccessResult(userDetail));
         }
         catch (Exception ex)
         {
@@ -100,7 +100,7 @@ public class UsersController : ControllerBase
             }
 
             var users = await _userManagementService.SearchUsersAsync(q, maxResults);
-            return ApiResponseDto<List<UserDto>>.SuccessResult(users.ToList());
+            return Ok(ApiResponseDto<List<UserDto>>.SuccessResult(users.ToList()));
         }
         catch (Exception ex)
         {
@@ -128,7 +128,7 @@ public class UsersController : ControllerBase
                 return NotFound(ApiResponseDto<UserDto>.ErrorResult("User not found"));
             }
 
-            return ApiResponseDto<UserDto>.SuccessResult(user);
+            return Ok(ApiResponseDto<UserDto>.SuccessResult(user));
         }
         catch (Exception ex)
         {
@@ -156,7 +156,7 @@ public class UsersController : ControllerBase
                 return NotFound(ApiResponseDto<UserDetailDto>.ErrorResult("User details not found"));
             }
 
-            return ApiResponseDto<UserDetailDto>.SuccessResult(userDetail);
+            return Ok(ApiResponseDto<UserDetailDto>.SuccessResult(userDetail));
         }
         catch (Exception ex)
         {
@@ -188,7 +188,7 @@ public class UsersController : ControllerBase
             }
 
             var organizations = await _userManagementService.GetUserOrganizationsAsync(userId);
-            return ApiResponseDto<List<UserOrganizationDto>>.SuccessResult(organizations.ToList());
+            return Ok(ApiResponseDto<List<UserOrganizationDto>>.SuccessResult(organizations.ToList()));
         }
         catch (Exception ex)
         {
@@ -217,7 +217,7 @@ public class UsersController : ControllerBase
             }
 
             var users = await _userManagementService.GetUsersByIdsAsync(userIds);
-            return ApiResponseDto<Dictionary<string, UserDto>>.SuccessResult(users);
+            return Ok(ApiResponseDto<Dictionary<string, UserDto>>.SuccessResult(users));
         }
         catch (Exception ex)
         {
@@ -240,11 +240,290 @@ public class UsersController : ControllerBase
             }
 
             var isActive = await _userManagementService.IsUserActiveAsync(userId);
-            return ApiResponseDto<bool>.SuccessResult(isActive);
+            return Ok(ApiResponseDto<bool>.SuccessResult(isActive));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error checking user status for {UserId}", userId);
+            return StatusCode(500, ApiResponseDto<bool>.ErrorResult("Internal server error"));
+        }
+    }
+
+    // 新しいユーザー管理機能のエンドポイント
+
+    /// <summary>
+    /// 新規ユーザーを作成
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "SystemAdmin")]
+    public async Task<ActionResult<ApiResponseDto<CreateUserResult>>> CreateUser(
+        [FromBody] CreateUserDto createUserDto)
+    {
+        try
+        {
+            var result = await _userManagementService.CreateUserAsync(createUserDto);
+            return Ok(ApiResponseDto<CreateUserResult>.SuccessResult(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating user {Username}", createUserDto.Username);
+            return StatusCode(500, ApiResponseDto<CreateUserResult>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// ユーザーを組織に招待
+    /// </summary>
+    [HttpPost("invite")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponseDto<InviteUserResult>>> InviteUser(
+        [FromBody] InviteUserDto inviteDto)
+    {
+        try
+        {
+            // 現在のユーザーが指定された組織の管理者であることを確認
+            var currentUserId = GetCurrentUserId();
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return BadRequest(ApiResponseDto<InviteUserResult>.ErrorResult("Unable to identify current user"));
+            }
+
+            // システム管理者または指定された組織の管理者かどうかを確認
+            var isSystemAdmin = await _userManagementService.IsSystemAdminAsync(currentUserId);
+            var isOrgAdmin = await _userManagementService.IsOrganizationAdminAsync(currentUserId, inviteDto.OrganizationId);
+            
+            if (!isSystemAdmin && !isOrgAdmin)
+            {
+                return Forbid("You don't have permission to invite users to this organization");
+            }
+
+            var result = await _userManagementService.InviteUserToOrganizationAsync(inviteDto);
+            return Ok(ApiResponseDto<InviteUserResult>.SuccessResult(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inviting user {Email}", inviteDto.Email);
+            return StatusCode(500, ApiResponseDto<InviteUserResult>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// 組織管理者が組織内でユーザーを作成
+    /// </summary>
+    [HttpPost("create-for-organization")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponseDto<CreateUserResult>>> CreateUserForOrganization(
+        [FromBody] CreateUserForOrganizationDto createUserDto)
+    {
+        try
+        {
+            // 現在のユーザーが指定された組織の管理者であることを確認
+            var currentUserId = GetCurrentUserId();
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return BadRequest(ApiResponseDto<CreateUserResult>.ErrorResult("Unable to identify current user"));
+            }
+
+            // システム管理者または指定された組織の管理者かどうかを確認
+            var isSystemAdmin = await _userManagementService.IsSystemAdminAsync(currentUserId);
+            var isOrgAdmin = await _userManagementService.IsOrganizationAdminAsync(currentUserId, createUserDto.OrganizationId);
+            
+            if (!isSystemAdmin && !isOrgAdmin)
+            {
+                return Forbid("You don't have permission to create users for this organization");
+            }
+
+            // CreateUserDtoに変換
+            var createDto = new CreateUserDto
+            {
+                Username = createUserDto.Username,
+                Email = createUserDto.Email,
+                FirstName = createUserDto.FirstName,
+                LastName = createUserDto.LastName,
+                TemporaryPassword = createUserDto.Password,
+                RequirePasswordChange = createUserDto.RequirePasswordChange,
+                IsActive = true,
+                RoleAssignments = new List<UserRoleAssignmentDto>
+                {
+                    new()
+                    {
+                        OrganizationId = createUserDto.OrganizationId,
+                        Role = createUserDto.Role
+                    }
+                }
+            };
+
+            var result = await _userManagementService.CreateUserAsync(createDto);
+            return Ok(ApiResponseDto<CreateUserResult>.SuccessResult(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating user for organization {OrganizationId}", createUserDto.OrganizationId);
+            return StatusCode(500, ApiResponseDto<CreateUserResult>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// ユーザーのパスワードをリセット（システム管理者のみ）
+    /// </summary>
+    [HttpPost("{userId}/reset-password")]
+    [Authorize(Policy = "SystemAdmin")]
+    public async Task<ActionResult<ApiResponseDto<ResetPasswordResult>>> ResetPassword(
+        string userId, [FromQuery] bool temporary = true)
+    {
+        try
+        {
+            var result = await _userManagementService.ResetUserPasswordAsync(userId, temporary);
+            return Ok(ApiResponseDto<ResetPasswordResult>.SuccessResult(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting password for user {UserId}", userId);
+            return StatusCode(500, ApiResponseDto<ResetPasswordResult>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// ユーザーの権限を変更
+    /// </summary>
+    [HttpPut("{userId}/role")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponseDto<bool>>> UpdateUserRole(
+        string userId, [FromBody] UpdateUserRoleDto updateDto)
+    {
+        try
+        {
+            // 現在のユーザーが指定された組織の管理者であることを確認
+            var currentUserId = GetCurrentUserId();
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return BadRequest(ApiResponseDto<bool>.ErrorResult("Unable to identify current user"));
+            }
+
+            // システム管理者または指定された組織の管理者かどうかを確認
+            var isSystemAdmin = await _userManagementService.IsSystemAdminAsync(currentUserId);
+            var isOrgAdmin = await _userManagementService.IsOrganizationAdminAsync(currentUserId, updateDto.OrganizationId);
+            
+            if (!isSystemAdmin && !isOrgAdmin)
+            {
+                return Forbid("You don't have permission to update user roles in this organization");
+            }
+
+            var result = await _userManagementService.UpdateUserRoleAsync(
+                updateDto.OrganizationId, userId, updateDto.NewRole);
+            return Ok(ApiResponseDto<bool>.SuccessResult(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating user role for {UserId}", userId);
+            return StatusCode(500, ApiResponseDto<bool>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// システム管理者権限を付与
+    /// </summary>
+    [HttpPost("{userId}/grant-system-admin")]
+    [Authorize(Policy = "SystemAdmin")]
+    public async Task<ActionResult<ApiResponseDto<bool>>> GrantSystemAdmin(
+        string userId, [FromBody] GrantSystemAdminDto grantDto)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return BadRequest(ApiResponseDto<bool>.ErrorResult("Unable to identify current user"));
+            }
+
+            grantDto.UserId = userId;
+            var result = await _userManagementService.GrantSystemAdminAsync(grantDto, currentUserId);
+            return Ok(ApiResponseDto<bool>.SuccessResult(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error granting system admin to user {UserId}", userId);
+            return StatusCode(500, ApiResponseDto<bool>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// システム管理者権限を削除
+    /// </summary>
+    [HttpDelete("{userId}/revoke-system-admin")]
+    [Authorize(Policy = "SystemAdmin")]
+    public async Task<ActionResult<ApiResponseDto<bool>>> RevokeSystemAdmin(string userId)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                return BadRequest(ApiResponseDto<bool>.ErrorResult("Unable to identify current user"));
+            }
+
+            var result = await _userManagementService.RevokeSystemAdminAsync(userId, currentUserId);
+            return Ok(ApiResponseDto<bool>.SuccessResult(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error revoking system admin from user {UserId}", userId);
+            return StatusCode(500, ApiResponseDto<bool>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// システム管理者一覧を取得
+    /// </summary>
+    [HttpGet("system-admins")]
+    [Authorize(Policy = "SystemAdmin")]
+    public async Task<ActionResult<ApiResponseDto<List<SystemAdminDto>>>> GetSystemAdmins()
+    {
+        try
+        {
+            var admins = await _userManagementService.GetSystemAdminsAsync();
+            return Ok(ApiResponseDto<List<SystemAdminDto>>.SuccessResult(admins.ToList()));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting system admins");
+            return StatusCode(500, ApiResponseDto<List<SystemAdminDto>>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// ユーザーがシステム管理者かどうかを確認
+    /// </summary>
+    [HttpGet("{userId}/is-system-admin")]
+    public async Task<ActionResult<ApiResponseDto<bool>>> IsSystemAdmin(string userId)
+    {
+        try
+        {
+            var result = await _userManagementService.IsSystemAdminAsync(userId);
+            return Ok(ApiResponseDto<bool>.SuccessResult(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking if user {UserId} is system admin", userId);
+            return StatusCode(500, ApiResponseDto<bool>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// ユーザーが組織管理者かどうかを確認
+    /// </summary>
+    [HttpGet("{userId}/is-organization-admin")]
+    public async Task<ActionResult<ApiResponseDto<bool>>> IsOrganizationAdmin(
+        string userId, [FromQuery] Guid? organizationId = null)
+    {
+        try
+        {
+            var result = await _userManagementService.IsOrganizationAdminAsync(userId, organizationId);
+            return Ok(ApiResponseDto<bool>.SuccessResult(result));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking if user {UserId} is organization admin", userId);
             return StatusCode(500, ApiResponseDto<bool>.ErrorResult("Internal server error"));
         }
     }

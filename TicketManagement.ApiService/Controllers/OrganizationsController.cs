@@ -114,7 +114,7 @@ public class OrganizationsController : ControllerBase
                 });
             }
             
-            return ApiResponseDto<List<OrganizationDto>>.SuccessResult(orgDtos);
+            return Ok(ApiResponseDto<List<OrganizationDto>>.SuccessResult(orgDtos));
         }
         catch (Exception ex)
         {
@@ -177,7 +177,7 @@ public class OrganizationsController : ControllerBase
                 }).ToList()
             };
 
-            return ApiResponseDto<OrganizationDto>.SuccessResult(orgDto);
+            return Ok(ApiResponseDto<OrganizationDto>.SuccessResult(orgDto));
         }
         catch (Exception ex)
         {
@@ -200,10 +200,13 @@ public class OrganizationsController : ControllerBase
                     .SelectMany(v => v.Errors)
                     .Select(e => e.ErrorMessage)
                     .ToList();
+                _logger.LogWarning("Invalid model state for CreateOrganization: {Errors}", string.Join(", ", errors));
                 return BadRequest(ApiResponseDto<OrganizationDto>.ErrorResult(errors));
             }
 
             var userId = GetCurrentUserId();
+            _logger.LogInformation("Creating organization: Name={Name}, DisplayName={DisplayName}, UserId={UserId}", 
+                dto.Name, dto.DisplayName, userId);
             var organization = await _organizationService.CreateOrganizationAsync(
                 dto.Name, 
                 dto.DisplayName, 
@@ -225,10 +228,14 @@ public class OrganizationsController : ControllerBase
                 CurrentMembers = 1 // Creator
             };
 
-            return ApiResponseDto<OrganizationDto>.SuccessResult(orgDto, "Organization created successfully");
+            return CreatedAtAction(
+                nameof(GetOrganization), 
+                new { id = organization.Id }, 
+                ApiResponseDto<OrganizationDto>.SuccessResult(orgDto, "Organization created successfully"));
         }
         catch (InvalidOperationException ex)
         {
+            _logger.LogWarning(ex, "Invalid operation while creating organization");
             return BadRequest(ApiResponseDto<OrganizationDto>.ErrorResult(ex.Message));
         }
         catch (Exception ex)
@@ -414,7 +421,7 @@ public class OrganizationsController : ControllerBase
                 IsActive = member.IsActive
             };
 
-            return ApiResponseDto<OrganizationMemberDto>.SuccessResult(memberDto, "Member added successfully");
+            return Ok(ApiResponseDto<OrganizationMemberDto>.SuccessResult(memberDto, "Member added successfully"));
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -467,7 +474,7 @@ public class OrganizationsController : ControllerBase
                 IsActive = member.IsActive
             };
 
-            return ApiResponseDto<OrganizationMemberDto>.SuccessResult(memberDto, "Member role updated successfully");
+            return Ok(ApiResponseDto<OrganizationMemberDto>.SuccessResult(memberDto, "Member role updated successfully"));
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -499,7 +506,7 @@ public class OrganizationsController : ControllerBase
             var removedBy = GetCurrentUserId();
             await _organizationService.RemoveMemberAsync(id, userId, removedBy);
             
-            return ApiResponseDto<string>.SuccessResult("success", "Member removed successfully");
+            return Ok(ApiResponseDto<string>.SuccessResult("success", "Member removed successfully"));
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -610,7 +617,7 @@ public class OrganizationsController : ControllerBase
                 TicketCount = 0
             };
 
-            return ApiResponseDto<ProjectDto>.SuccessResult(projectDto, "Project created successfully");
+            return Ok(ApiResponseDto<ProjectDto>.SuccessResult(projectDto, "Project created successfully"));
         }
         catch (UnauthorizedAccessException ex)
         {

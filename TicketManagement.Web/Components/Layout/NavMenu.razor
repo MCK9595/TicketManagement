@@ -1,5 +1,8 @@
 ﻿@using TicketManagement.Web.Services
+@using Microsoft.AspNetCore.Components.Authorization
 @inject NotificationHubService NotificationHub
+@inject TicketManagementApiClient ApiClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -55,6 +58,20 @@
             </NavLink>
         </div>
 
+        @if (isSystemAdmin)
+        {
+            <div class="nav-item px-3">
+                <hr class="text-muted" />
+                <small class="text-muted px-3">Administration</small>
+            </div>
+            
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="admin/users">
+                    <span class="bi bi-people-fill" aria-hidden="true"></span> User Management
+                </NavLink>
+            </div>
+        }
+
         <AuthorizeView>
             <Authorized>
                 <div class="nav-item px-3">
@@ -86,10 +103,37 @@
 
 @code {
     private int unreadCount = 0;
+    private bool isSystemAdmin = false;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         NotificationHub.UnreadCountUpdated += OnUnreadCountUpdated;
+        await CheckSystemAdminStatus();
+    }
+
+    private async Task CheckSystemAdminStatus()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (authState.User.Identity?.IsAuthenticated == true)
+            {
+                var userId = authState.User.FindFirst("sub")?.Value ?? 
+                           authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var response = await ApiClient.IsSystemAdminAsync(userId);
+                    isSystemAdmin = response?.Data == true;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Silently handle errors - user just won't see admin menu
+            isSystemAdmin = false;
+        }
     }
 
     private void OnUnreadCountUpdated(int count)

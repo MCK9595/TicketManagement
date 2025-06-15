@@ -15,4 +15,5 @@ public interface IOrganizationMemberRepository : IRepository<OrganizationMember,
     Task<bool> UpdateMemberRoleAsync(Guid organizationId, string userId, OrganizationRole newRole);
     Task<IEnumerable<Organization>> GetUserOrganizationsWithRoleAsync(string userId);
     Task<IEnumerable<OrganizationMember>> GetUserOrganizationMembershipsAsync(string userId);
+    Task<OrganizationMember?> GetByUserIdAndOrganizationIdAsync(string userId, Guid organizationId);
 }

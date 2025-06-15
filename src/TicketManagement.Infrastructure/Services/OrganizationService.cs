@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using System.Security.Claims;
 using TicketManagement.Contracts.Repositories;
 using TicketManagement.Contracts.Services;
 using TicketManagement.Core.Entities;
@@ -12,6 +14,7 @@ public class OrganizationService : IOrganizationService
     private readonly IOrganizationMemberRepository _memberRepository;
     private readonly INotificationService _notificationService;
     private readonly ICacheService _cacheService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<OrganizationService> _logger;
 
     public OrganizationService(
@@ -19,12 +22,14 @@ public class OrganizationService : IOrganizationService
         IOrganizationMemberRepository memberRepository,
         INotificationService notificationService,
         ICacheService cacheService,
+        IHttpContextAccessor httpContextAccessor,
         ILogger<OrganizationService> logger)
     {
         _organizationRepository = organizationRepository;
         _memberRepository = memberRepository;
         _notificationService = notificationService;
         _cacheService = cacheService;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -56,21 +61,28 @@ public class OrganizationService : IOrganizationService
         var createdOrg = await _organizationRepository.AddAsync(organization);
 
         // Add creator as admin
+        // Get user information from HttpContext if available
+        var httpContext = _httpContextAccessor.HttpContext;
+        var userName = httpContext?.User?.Identity?.Name ?? createdBy;
+        var userEmail = httpContext?.User?.Claims?.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value;
+
         var adminMember = new OrganizationMember
         {
             Id = Guid.NewGuid(),
             OrganizationId = createdOrg.Id,
             UserId = createdBy,
-            UserName = createdBy, // TODO: Get actual user name from user service
+            UserName = userName,
+            UserEmail = userEmail ?? string.Empty,
             Role = OrganizationRole.Admin,
             JoinedAt = DateTime.UtcNow,
+            InvitedBy = "system",
             IsActive = true
         };
 
         await _memberRepository.AddAsync(adminMember);
 
-        _logger.LogInformation("Organization created: {OrganizationId} by user {UserId}. Added admin member with UserId: {AdminUserId}", 
-            createdOrg.Id, createdBy, adminMember.UserId);
+        _logger.LogInformation("Organization created: {OrganizationId} by user {UserId}. Added admin member: UserId={AdminUserId}, UserName={UserName}, UserEmail={UserEmail}, Role={Role}", 
+            createdOrg.Id, createdBy, adminMember.UserId, adminMember.UserName, adminMember.UserEmail, adminMember.Role);
 
         return createdOrg;
     }

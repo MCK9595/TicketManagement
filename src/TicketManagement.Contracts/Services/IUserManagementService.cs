@@ -1,4 +1,5 @@
 using TicketManagement.Contracts.DTOs;
+using TicketManagement.Core.Enums;
 
 namespace TicketManagement.Contracts.Services;
 
@@ -38,4 +39,51 @@ public interface IUserManagementService
     /// ユーザーの有効性を確認
     /// </summary>
     Task<bool> IsUserActiveAsync(string userId);
+
+    // 新しいユーザー管理機能
+
+    /// <summary>
+    /// 新規ユーザーをKeycloakに作成
+    /// </summary>
+    Task<CreateUserResult> CreateUserAsync(CreateUserDto createUserDto);
+
+    /// <summary>
+    /// ユーザーを組織に招待
+    /// </summary>
+    Task<InviteUserResult> InviteUserToOrganizationAsync(InviteUserDto inviteDto);
+
+    /// <summary>
+    /// ユーザーのパスワードをリセット
+    /// </summary>
+    Task<ResetPasswordResult> ResetUserPasswordAsync(string userId, bool temporary = true);
+
+    /// <summary>
+    /// ユーザーの権限を変更
+    /// </summary>
+    Task<bool> UpdateUserRoleAsync(Guid organizationId, string userId, OrganizationRole newRole);
+
+    /// <summary>
+    /// システム管理者権限を付与
+    /// </summary>
+    Task<bool> GrantSystemAdminAsync(GrantSystemAdminDto grantDto, string grantedBy);
+
+    /// <summary>
+    /// システム管理者権限を削除
+    /// </summary>
+    Task<bool> RevokeSystemAdminAsync(string userId, string revokedBy);
+
+    /// <summary>
+    /// システム管理者一覧を取得
+    /// </summary>
+    Task<IEnumerable<SystemAdminDto>> GetSystemAdminsAsync();
+
+    /// <summary>
+    /// ユーザーがシステム管理者かどうかを確認
+    /// </summary>
+    Task<bool> IsSystemAdminAsync(string userId);
+
+    /// <summary>
+    /// ユーザーが組織管理者かどうかを確認
+    /// </summary>
+    Task<bool> IsOrganizationAdminAsync(string userId, Guid? organizationId = null);
 }

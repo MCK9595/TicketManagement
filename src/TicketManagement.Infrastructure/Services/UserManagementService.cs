@@ -7,7 +7,12 @@ using TicketManagement.Contracts.Services;
 using TicketManagement.Contracts.DTOs;
 using TicketManagement.Contracts.Repositories;
 using TicketManagement.Core.Entities;
+using TicketManagement.Core.Enums;
+using TicketManagement.Infrastructure.Data;
+using TicketManagement.Infrastructure.Utilities;
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
+using System.Text;
 
 namespace TicketManagement.Infrastructure.Services;
 
@@ -18,6 +23,7 @@ public class UserManagementService : IUserManagementService
     private readonly IOrganizationMemberRepository _organizationMemberRepository;
     private readonly IProjectRepository _projectRepository;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly TicketDbContext _context;
     private readonly ICacheService _cacheService;
     private readonly ILogger<UserManagementService> _logger;
     private readonly IConfiguration _configuration;
@@ -34,6 +40,7 @@ public class UserManagementService : IUserManagementService
         IOrganizationMemberRepository organizationMemberRepository,
         IProjectRepository projectRepository,
         IHttpContextAccessor httpContextAccessor,
+        TicketDbContext context,
         ICacheService cacheService,
         ILogger<UserManagementService> logger,
         IConfiguration configuration)
@@ -41,6 +48,7 @@ public class UserManagementService : IUserManagementService
         _httpClient = httpClient;
         _organizationRepository = organizationRepository;
         _organizationMemberRepository = organizationMemberRepository;
+        _context = context;
         _projectRepository = projectRepository;
         _httpContextAccessor = httpContextAccessor;
         _cacheService = cacheService;
@@ -346,12 +354,9 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            // This would typically use client credentials flow
-            // For development, you might use admin credentials
-            var clientId = _configuration["Keycloak:AdminClientId"] ?? "admin-cli";
-            var clientSecret = _configuration["Keycloak:AdminClientSecret"];
-            var username = _configuration["Keycloak:AdminUsername"] ?? "admin";
-            var password = _configuration["Keycloak:AdminPassword"] ?? "admin123";
+            // Use client credentials flow for service account
+            var clientId = _configuration["Keycloak:AdminClientId"] ?? "ticket-management-service";
+            var clientSecret = _configuration["Keycloak:AdminClientSecret"] ?? "ticket-management-service-secret";
 
             // Use Aspire service discovery URL with port
             var keycloakBaseUrl = "http://keycloak:8080";
@@ -359,22 +364,19 @@ public class UserManagementService : IUserManagementService
             
             var formData = new List<KeyValuePair<string, string>>
             {
-                new("grant_type", "password"),
+                new("grant_type", "client_credentials"),
                 new("client_id", clientId),
-                new("username", username),
-                new("password", password)
+                new("client_secret", clientSecret)
             };
-
-            if (!string.IsNullOrEmpty(clientSecret))
-            {
-                formData.Add(new("client_secret", clientSecret));
-            }
 
             // Temporarily clear the Authorization header to avoid token conflicts
             var originalAuth = _httpClient.DefaultRequestHeaders.Authorization;
             _httpClient.DefaultRequestHeaders.Authorization = null;
 
             var tokenUrl = $"{keycloakBaseUrl}/realms/{realm}/protocol/openid-connect/token";
+            _logger.LogDebug("Requesting service account token from: {TokenUrl}", tokenUrl);
+            _logger.LogDebug("Using client credentials: ClientId={ClientId}", clientId);
+            
             var response = await _httpClient.PostAsync(tokenUrl, new FormUrlEncodedContent(formData));
 
             // Restore the original Authorization header
@@ -383,11 +385,14 @@ public class UserManagementService : IUserManagementService
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
+                _logger.LogDebug("Token response received successfully");
                 var tokenResponse = JsonSerializer.Deserialize<TokenResponseDto>(content, _jsonOptions);
                 return tokenResponse?.AccessToken;
             }
 
-            _logger.LogWarning("Failed to get service account token: {StatusCode}", response.StatusCode);
+            var errorContent = await response.Content.ReadAsStringAsync();
+            _logger.LogError("Failed to get service account token: {StatusCode}, Response: {ErrorContent}", 
+                response.StatusCode, errorContent);
             return null;
         }
         catch (Exception ex)
@@ -493,5 +498,427 @@ public class UserManagementService : IUserManagementService
         public string AccessToken { get; set; } = string.Empty;
         public string TokenType { get; set; } = string.Empty;
         public int ExpiresIn { get; set; }
+    }
+
+    // 新しいユーザー管理機能の実装
+
+    public async Task<CreateUserResult> CreateUserAsync(CreateUserDto createUserDto)
+    {
+        try
+        {
+            _logger.LogInformation("Starting user creation for username: {Username}", createUserDto.Username);
+            
+            var token = await GetServiceAccountTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                _logger.LogError("Failed to obtain service account token for user creation");
+                return new CreateUserResult
+                {
+                    Success = false,
+                    Errors = new List<string> { "Failed to authenticate with identity provider" },
+                    Message = "Authentication failed with Keycloak"
+                };
+            }
+            
+            _logger.LogDebug("Successfully obtained service account token for user creation");
+
+            var temporaryPassword = !string.IsNullOrEmpty(createUserDto.TemporaryPassword)
+                ? createUserDto.TemporaryPassword
+                : PasswordManager.GenerateTemporaryPassword();
+
+            var keycloakUser = new
+            {
+                username = createUserDto.Username,
+                email = createUserDto.Email,
+                firstName = createUserDto.FirstName,
+                lastName = createUserDto.LastName,
+                enabled = createUserDto.IsActive,
+                credentials = new[]
+                {
+                    new
+                    {
+                        type = "password",
+                        value = temporaryPassword,
+                        temporary = createUserDto.RequirePasswordChange
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(keycloakUser, _jsonOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            
+            // Create user using the configured base path
+            var adminUrl = "users";
+            
+            _logger.LogDebug("Sending user creation request to Keycloak: {Url}", adminUrl);
+            _logger.LogDebug("User data: {UserData}", JsonSerializer.Serialize(keycloakUser, _jsonOptions));
+            
+            var response = await _httpClient.PostAsync(adminUrl, content);
+            
+            _logger.LogInformation("Keycloak user creation response: {StatusCode}", response.StatusCode);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var locationHeader = response.Headers.Location?.ToString();
+                _logger.LogDebug("Location header from Keycloak: {LocationHeader}", locationHeader);
+                
+                var userId = locationHeader?.Split('/').LastOrDefault();
+                _logger.LogDebug("Extracted user ID: {UserId}", userId);
+
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    _logger.LogInformation("User created successfully in Keycloak with ID: {UserId}", userId);
+                    
+                    // 組織への追加
+                    foreach (var roleAssignment in createUserDto.RoleAssignments)
+                    {
+                        _logger.LogDebug("Adding user {UserId} to organization {OrganizationId} with role {Role}", 
+                            userId, roleAssignment.OrganizationId, roleAssignment.Role);
+                        await AddUserToOrganizationAsync(userId, roleAssignment.OrganizationId, roleAssignment.Role);
+                    }
+
+                    _logger.LogInformation("User creation process completed successfully for {Username}", createUserDto.Username);
+                    return new CreateUserResult
+                    {
+                        Success = true,
+                        UserId = userId,
+                        TemporaryPassword = temporaryPassword,
+                        Message = "User created successfully"
+                    };
+                }
+                else
+                {
+                    _logger.LogError("Failed to extract user ID from location header: {LocationHeader}", locationHeader);
+                }
+            }
+
+            var errorMessage = await response.Content.ReadAsStringAsync();
+            _logger.LogError("Keycloak user creation failed: {StatusCode}, Response: {ErrorMessage}", 
+                response.StatusCode, errorMessage);
+                
+            return new CreateUserResult
+            {
+                Success = false,
+                Errors = new List<string> { $"Failed to create user: {response.StatusCode} - {errorMessage}" },
+                Message = $"Keycloak API error: {response.StatusCode}"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating user {Username}", createUserDto.Username);
+            return new CreateUserResult
+            {
+                Success = false,
+                Errors = new List<string> { "An unexpected error occurred while creating the user" }
+            };
+        }
+    }
+
+    public async Task<InviteUserResult> InviteUserToOrganizationAsync(InviteUserDto inviteDto)
+    {
+        try
+        {
+            // 既存ユーザーを検索
+            var existingUsers = await SearchUsersAsync(inviteDto.Email, 1);
+            var existingUser = existingUsers.FirstOrDefault();
+
+            if (existingUser != null)
+            {
+                // 既存ユーザーを組織に追加
+                var success = await AddUserToOrganizationAsync(existingUser.Id, inviteDto.OrganizationId, inviteDto.Role);
+                
+                return new InviteUserResult
+                {
+                    Success = success,
+                    UserId = existingUser.Id,
+                    UserAlreadyExists = true,
+                    Message = success ? "User added to organization successfully" : "Failed to add user to organization"
+                };
+            }
+            else
+            {
+                // 新規ユーザーを作成
+                var createUserDto = new CreateUserDto
+                {
+                    Username = inviteDto.Email,
+                    Email = inviteDto.Email,
+                    FirstName = inviteDto.FirstName,
+                    LastName = inviteDto.LastName,
+                    IsActive = true,
+                    RequirePasswordChange = true,
+                    RoleAssignments = new List<UserRoleAssignmentDto>
+                    {
+                        new()
+                        {
+                            OrganizationId = inviteDto.OrganizationId,
+                            Role = inviteDto.Role
+                        }
+                    }
+                };
+
+                var createResult = await CreateUserAsync(createUserDto);
+                
+                return new InviteUserResult
+                {
+                    Success = createResult.Success,
+                    UserId = createResult.UserId,
+                    UserAlreadyExists = false,
+                    Errors = createResult.Errors,
+                    Message = createResult.Message
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inviting user {Email} to organization {OrganizationId}", 
+                inviteDto.Email, inviteDto.OrganizationId);
+            return new InviteUserResult
+            {
+                Success = false,
+                Errors = new List<string> { "An unexpected error occurred while inviting the user" }
+            };
+        }
+    }
+
+    public async Task<ResetPasswordResult> ResetUserPasswordAsync(string userId, bool temporary = true)
+    {
+        try
+        {
+            var token = await GetServiceAccountTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                return new ResetPasswordResult
+                {
+                    Success = false,
+                    Errors = new List<string> { "Failed to authenticate with identity provider" }
+                };
+            }
+
+            var newPassword = PasswordManager.GenerateTemporaryPassword();
+            var credential = new
+            {
+                type = "password",
+                value = newPassword,
+                temporary = temporary
+            };
+
+            var json = JsonSerializer.Serialize(credential, _jsonOptions);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await _httpClient.PutAsync($"users/{userId}/reset-password", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return new ResetPasswordResult
+                {
+                    Success = true,
+                    TemporaryPassword = newPassword,
+                    Message = "Password reset successfully"
+                };
+            }
+
+            var errorMessage = await response.Content.ReadAsStringAsync();
+            return new ResetPasswordResult
+            {
+                Success = false,
+                Errors = new List<string> { $"Failed to reset password: {errorMessage}" }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting password for user {UserId}", userId);
+            return new ResetPasswordResult
+            {
+                Success = false,
+                Errors = new List<string> { "An unexpected error occurred while resetting the password" }
+            };
+        }
+    }
+
+    public async Task<bool> UpdateUserRoleAsync(Guid organizationId, string userId, OrganizationRole newRole)
+    {
+        try
+        {
+            var existingMember = await _organizationMemberRepository.GetByUserIdAndOrganizationIdAsync(userId, organizationId);
+            if (existingMember == null)
+            {
+                return false;
+            }
+
+            existingMember.Role = newRole;
+
+            await _organizationMemberRepository.UpdateAsync(existingMember);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating user role for {UserId} in organization {OrganizationId}", 
+                userId, organizationId);
+            return false;
+        }
+    }
+
+    public async Task<bool> GrantSystemAdminAsync(GrantSystemAdminDto grantDto, string grantedBy)
+    {
+        try
+        {
+            var existingAdmin = await _context.SystemAdmins
+                .FirstOrDefaultAsync(sa => sa.UserId == grantDto.UserId);
+
+            if (existingAdmin != null)
+            {
+                if (existingAdmin.IsActive)
+                {
+                    return true; // Already an active system admin
+                }
+                
+                // Reactivate
+                existingAdmin.IsActive = true;
+                existingAdmin.GrantedAt = DateTime.UtcNow;
+                existingAdmin.GrantedBy = grantedBy;
+                existingAdmin.Reason = grantDto.Reason;
+            }
+            else
+            {
+                var systemAdmin = new SystemAdmin
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = grantDto.UserId,
+                    UserName = grantDto.UserName,
+                    UserEmail = grantDto.UserEmail,
+                    GrantedAt = DateTime.UtcNow,
+                    GrantedBy = grantedBy,
+                    IsActive = true,
+                    Reason = grantDto.Reason
+                };
+
+                _context.SystemAdmins.Add(systemAdmin);
+            }
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error granting system admin privileges to user {UserId}", grantDto.UserId);
+            return false;
+        }
+    }
+
+    public async Task<bool> RevokeSystemAdminAsync(string userId, string revokedBy)
+    {
+        try
+        {
+            var systemAdmin = await _context.SystemAdmins
+                .FirstOrDefaultAsync(sa => sa.UserId == userId && sa.IsActive);
+
+            if (systemAdmin == null)
+            {
+                return false;
+            }
+
+            systemAdmin.IsActive = false;
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error revoking system admin privileges from user {UserId}", userId);
+            return false;
+        }
+    }
+
+    public async Task<IEnumerable<SystemAdminDto>> GetSystemAdminsAsync()
+    {
+        try
+        {
+            var systemAdmins = await _context.SystemAdmins
+                .Where(sa => sa.IsActive)
+                .ToListAsync();
+
+            return systemAdmins.Select(sa => new SystemAdminDto
+            {
+                Id = sa.Id,
+                UserId = sa.UserId,
+                UserName = sa.UserName,
+                UserEmail = sa.UserEmail,
+                GrantedAt = sa.GrantedAt,
+                GrantedBy = sa.GrantedBy,
+                IsActive = sa.IsActive,
+                Reason = sa.Reason
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting system admins");
+            return Enumerable.Empty<SystemAdminDto>();
+        }
+    }
+
+    public async Task<bool> IsSystemAdminAsync(string userId)
+    {
+        try
+        {
+            return await _context.SystemAdmins
+                .AnyAsync(sa => sa.UserId == userId && sa.IsActive);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking if user {UserId} is system admin", userId);
+            return false;
+        }
+    }
+
+    public async Task<bool> IsOrganizationAdminAsync(string userId, Guid? organizationId = null)
+    {
+        try
+        {
+            var query = _context.OrganizationMembers
+                .Where(om => om.UserId == userId && om.Role == OrganizationRole.Admin);
+
+            if (organizationId.HasValue)
+            {
+                query = query.Where(om => om.OrganizationId == organizationId.Value);
+            }
+
+            return await query.AnyAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking if user {UserId} is organization admin", userId);
+            return false;
+        }
+    }
+
+    private async Task<bool> AddUserToOrganizationAsync(string userId, Guid organizationId, OrganizationRole role)
+    {
+        try
+        {
+            var existingMember = await _organizationMemberRepository.GetByUserIdAndOrganizationIdAsync(userId, organizationId);
+            if (existingMember != null)
+            {
+                return true; // Already a member
+            }
+
+            var member = new OrganizationMember
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                UserId = userId,
+                Role = role,
+                JoinedAt = DateTime.UtcNow
+            };
+
+            await _organizationMemberRepository.AddAsync(member);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding user {UserId} to organization {OrganizationId}", userId, organizationId);
+            return false;
+        }
     }
 }

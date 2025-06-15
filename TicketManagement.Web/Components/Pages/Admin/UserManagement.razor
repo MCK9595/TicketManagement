@@ -1,0 +1,703 @@
+@page "/admin/users"
+@using TicketManagement.Web.Services
+@using TicketManagement.Contracts.DTOs
+@using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.Components.Authorization
+@using TicketManagement.Core.Enums
+@inject TicketManagementApiClient ApiClient
+@inject NavigationManager Navigation
+@inject ILogger<UserManagement> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>User Management - Ticket Management</PageTitle>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading user management...</p>
+    </div>
+}
+else
+{
+    <div class="container-fluid">
+        <div class="row mb-4">
+            <div class="col">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="/">Home</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">User Management</li>
+                    </ol>
+                </nav>
+                
+                <div class="d-flex justify-content-between align-items-center">
+                    <h2>User Management</h2>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary" @onclick="ShowCreateUserForm">
+                            <span class="bi bi-person-plus" aria-hidden="true"></span> Create User
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="RefreshData">
+                            <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                @errorMessage
+                <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                @successMessage
+                <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+            </div>
+        }
+
+        <!-- System Admins Section -->
+        <div class="row mb-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">System Administrators</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (systemAdmins?.Any() == true)
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>User</th>
+                                            <th>Email</th>
+                                            <th>Granted By</th>
+                                            <th>Granted At</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var admin in systemAdmins)
+                                        {
+                                            <tr>
+                                                <td>@admin.UserName</td>
+                                                <td>@admin.UserEmail</td>
+                                                <td>@admin.GrantedBy</td>
+                                                <td>@admin.GrantedAt.ToString("MMM dd, yyyy")</td>
+                                                <td>
+                                                    @if (admin.UserId != currentUserId)
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-danger" 
+                                                                @onclick="() => RevokeSystemAdmin(admin.UserId, admin.UserName)">
+                                                            <span class="bi bi-person-dash" aria-hidden="true"></span> Revoke
+                                                        </button>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">Current User</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">No system administrators found.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Search and Management -->
+        <div class="row">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">User Search & Management</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-8">
+                                <div class="input-group">
+                                    <input type="text" class="form-control" placeholder="Search users by name or email..." 
+                                           @bind="searchTerm" @onkeyup="OnSearchKeyUp" />
+                                    <button class="btn btn-outline-secondary" type="button" @onclick="SearchUsers" disabled="@isSearching">
+                                        @if (isSearching)
+                                        {
+                                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                                        }
+                                        else
+                                        {
+                                            <span class="bi bi-search" aria-hidden="true"></span>
+                                        }
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (searchResults?.Any() == true)
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>User</th>
+                                            <th>Email</th>
+                                            <th>Status</th>
+                                            <th>System Admin</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var user in searchResults)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <div>
+                                                        <div class="fw-medium">@(user.DisplayName ?? user.Username)</div>
+                                                        <small class="text-muted">@user.Username</small>
+                                                    </div>
+                                                </td>
+                                                <td>@user.Email</td>
+                                                <td>
+                                                    @if (user.IsActive)
+                                                    {
+                                                        <span class="badge bg-success">Active</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary">Inactive</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (userSystemAdminStatus.ContainsKey(user.Id) && userSystemAdminStatus[user.Id])
+                                                    {
+                                                        <span class="badge bg-primary">Yes</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-outline-secondary">No</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm">
+                                                        @if (!userSystemAdminStatus.ContainsKey(user.Id) || !userSystemAdminStatus[user.Id])
+                                                        {
+                                                            <button class="btn btn-outline-primary" 
+                                                                    @onclick="() => ShowGrantSystemAdminForm(user)">
+                                                                <span class="bi bi-shield-plus" aria-hidden="true"></span> Grant Admin
+                                                            </button>
+                                                        }
+                                                        <button class="btn btn-outline-secondary" 
+                                                                @onclick="() => ResetUserPassword(user.Id, user.Username)">
+                                                            <span class="bi bi-key" aria-hidden="true"></span> Reset Password
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else if (searchResults != null && !string.IsNullOrWhiteSpace(searchTerm))
+                        {
+                            <div class="alert alert-info">
+                                <span class="bi bi-info-circle me-2" aria-hidden="true"></span>
+                                No users found matching your search criteria.
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    @if (showCreateUserModal)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Create New User</h5>
+                        <button type="button" class="btn-close" @onclick="CancelCreateUser"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="createUsername" class="form-label">Username *</label>
+                                <input type="text" id="createUsername" class="form-control" @bind="createUserForm.Username" />
+                            </div>
+                            <div class="col-md-6">
+                                <label for="createEmail" class="form-label">Email *</label>
+                                <input type="email" id="createEmail" class="form-control" @bind="createUserForm.Email" />
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="createFirstName" class="form-label">First Name</label>
+                                <input type="text" id="createFirstName" class="form-control" @bind="createUserForm.FirstName" />
+                            </div>
+                            <div class="col-md-6">
+                                <label for="createLastName" class="form-label">Last Name</label>
+                                <input type="text" id="createLastName" class="form-control" @bind="createUserForm.LastName" />
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="createPassword" class="form-label">Temporary Password</label>
+                                <input type="text" id="createPassword" class="form-control" @bind="createUserForm.TemporaryPassword" 
+                                       placeholder="Leave empty for auto-generated password" />
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check mt-4">
+                                    <input type="checkbox" id="createRequirePasswordChange" class="form-check-input" 
+                                           @bind="createUserForm.RequirePasswordChange" />
+                                    <label for="createRequirePasswordChange" class="form-check-label">
+                                        Require password change on first login
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CancelCreateUser">Cancel</button>
+                        <button type="button" class="btn btn-primary" @onclick="CreateUser" 
+                                disabled="@(isSaving || string.IsNullOrWhiteSpace(createUserForm.Username) || string.IsNullOrWhiteSpace(createUserForm.Email))">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            Create User
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Grant System Admin Modal -->
+    @if (showGrantAdminModal)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Grant System Administrator Privileges</h5>
+                        <button type="button" class="btn-close" @onclick="CancelGrantAdmin"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Are you sure you want to grant system administrator privileges to <strong>@selectedUser?.Username</strong>?</p>
+                        <div class="mb-3">
+                            <label for="grantReason" class="form-label">Reason (Optional)</label>
+                            <textarea id="grantReason" class="form-control" rows="3" @bind="grantAdminForm.Reason" 
+                                      placeholder="Reason for granting admin privileges..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CancelGrantAdmin">Cancel</button>
+                        <button type="button" class="btn btn-primary" @onclick="GrantSystemAdmin" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            Grant Admin Privileges
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private bool isLoading = true;
+    private bool isSearching = false;
+    private bool isSaving = false;
+    private string? errorMessage;
+    private string? successMessage;
+    private string searchTerm = string.Empty;
+    private string? currentUserId;
+
+    private List<SystemAdminDto>? systemAdmins;
+    private List<UserDto>? searchResults;
+    private Dictionary<string, bool> userSystemAdminStatus = new();
+
+    private bool showCreateUserModal = false;
+    private bool showGrantAdminModal = false;
+    private UserDto? selectedUser;
+
+    private CreateUserFormModel createUserForm = new();
+    private GrantAdminFormModel grantAdminForm = new();
+
+    private Timer? searchTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCurrentUser();
+        await LoadSystemAdmins();
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadCurrentUser()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            currentUserId = authState.User.FindFirst("sub")?.Value ?? 
+                           authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading current user");
+        }
+    }
+
+    private async Task LoadSystemAdmins()
+    {
+        try
+        {
+            var response = await ApiClient.GetSystemAdminsAsync();
+            if (response?.Success == true)
+            {
+                systemAdmins = response.Data;
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to load system administrators.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading system admins");
+            errorMessage = "Error loading system administrators.";
+        }
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchUsers();
+        }
+        else
+        {
+            searchTimer?.Dispose();
+            searchTimer = new Timer(async _ =>
+            {
+                await InvokeAsync(SearchUsers);
+            }, null, 500, Timeout.Infinite);
+        }
+    }
+
+    private async Task SearchUsers()
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Length < 2)
+        {
+            searchResults = null;
+            StateHasChanged();
+            return;
+        }
+
+        isSearching = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await ApiClient.SearchUsersAsync(searchTerm);
+            if (response?.Success == true)
+            {
+                searchResults = response.Data?.ToList() ?? new List<UserDto>();
+                await LoadUserSystemAdminStatus();
+            }
+            else
+            {
+                searchResults = new List<UserDto>();
+                errorMessage = response?.Message ?? "Error searching users.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error searching users");
+            searchResults = new List<UserDto>();
+            errorMessage = "Error searching users.";
+        }
+        finally
+        {
+            isSearching = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadUserSystemAdminStatus()
+    {
+        if (searchResults == null) return;
+
+        userSystemAdminStatus.Clear();
+        
+        foreach (var user in searchResults)
+        {
+            try
+            {
+                var response = await ApiClient.IsSystemAdminAsync(user.Id);
+                userSystemAdminStatus[user.Id] = response?.Data == true;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error checking system admin status for user {UserId}", user.Id);
+                userSystemAdminStatus[user.Id] = false;
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    private void ShowCreateUserForm()
+    {
+        createUserForm = new CreateUserFormModel();
+        showCreateUserModal = true;
+        StateHasChanged();
+    }
+
+    private void CancelCreateUser()
+    {
+        showCreateUserModal = false;
+        createUserForm = new CreateUserFormModel();
+        StateHasChanged();
+    }
+
+    private async Task CreateUser()
+    {
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var createDto = new CreateUserDto
+            {
+                Username = createUserForm.Username,
+                Email = createUserForm.Email,
+                FirstName = createUserForm.FirstName,
+                LastName = createUserForm.LastName,
+                TemporaryPassword = createUserForm.TemporaryPassword,
+                RequirePasswordChange = createUserForm.RequirePasswordChange,
+                IsActive = true
+            };
+
+            var response = await ApiClient.CreateUserAsync(createDto);
+            if (response?.Success == true && response.Data?.Success == true)
+            {
+                var result = response.Data;
+                successMessage = $"User {createUserForm.Username} created successfully.";
+                if (!string.IsNullOrEmpty(result.TemporaryPassword))
+                {
+                    successMessage += $" Temporary password: {result.TemporaryPassword}";
+                }
+                
+                showCreateUserModal = false;
+                createUserForm = new CreateUserFormModel();
+            }
+            else
+            {
+                errorMessage = response?.Data?.Message ?? response?.Message ?? "Failed to create user.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating user");
+            errorMessage = "Error creating user.";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowGrantSystemAdminForm(UserDto user)
+    {
+        selectedUser = user;
+        grantAdminForm = new GrantAdminFormModel();
+        showGrantAdminModal = true;
+        StateHasChanged();
+    }
+
+    private void CancelGrantAdmin()
+    {
+        showGrantAdminModal = false;
+        selectedUser = null;
+        grantAdminForm = new GrantAdminFormModel();
+        StateHasChanged();
+    }
+
+    private async Task GrantSystemAdmin()
+    {
+        if (selectedUser == null) return;
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var grantDto = new GrantSystemAdminDto
+            {
+                UserId = selectedUser.Id,
+                UserName = selectedUser.Username,
+                UserEmail = selectedUser.Email,
+                Reason = grantAdminForm.Reason
+            };
+
+            var response = await ApiClient.GrantSystemAdminAsync(selectedUser.Id, grantDto);
+            if (response?.Success == true && response.Data == true)
+            {
+                successMessage = $"System administrator privileges granted to {selectedUser.Username}.";
+                showGrantAdminModal = false;
+                selectedUser = null;
+                grantAdminForm = new GrantAdminFormModel();
+                
+                await LoadSystemAdmins();
+                await LoadUserSystemAdminStatus();
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to grant system administrator privileges.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error granting system admin privileges");
+            errorMessage = "Error granting system administrator privileges.";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RevokeSystemAdmin(string userId, string userName)
+    {
+        if (userId == currentUserId)
+        {
+            errorMessage = "You cannot revoke your own system administrator privileges.";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var response = await ApiClient.RevokeSystemAdminAsync(userId);
+            if (response?.Success == true && response.Data == true)
+            {
+                successMessage = $"System administrator privileges revoked from {userName}.";
+                await LoadSystemAdmins();
+                await LoadUserSystemAdminStatus();
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to revoke system administrator privileges.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error revoking system admin privileges");
+            errorMessage = "Error revoking system administrator privileges.";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ResetUserPassword(string userId, string userName)
+    {
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var response = await ApiClient.ResetPasswordAsync(userId, true);
+            if (response?.Success == true && response.Data?.Success == true)
+            {
+                var result = response.Data;
+                successMessage = $"Password reset for {userName}. Temporary password: {result.TemporaryPassword}";
+            }
+            else
+            {
+                errorMessage = response?.Data?.Message ?? response?.Message ?? "Failed to reset password.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error resetting password");
+            errorMessage = "Error resetting password.";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        isLoading = true;
+        StateHasChanged();
+        
+        await LoadSystemAdmins();
+        
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            await SearchUsers();
+        }
+        
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        searchTimer?.Dispose();
+    }
+
+    private class CreateUserFormModel
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? TemporaryPassword { get; set; }
+        public bool RequirePasswordChange { get; set; } = true;
+    }
+
+    private class GrantAdminFormModel
+    {
+        public string? Reason { get; set; }
+    }
+}

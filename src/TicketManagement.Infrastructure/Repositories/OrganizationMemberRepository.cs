@@ -107,4 +107,10 @@ public class OrganizationMemberRepository : Repository<OrganizationMember, Guid>
             .OrderBy(om => om.Organization.Name)
             .ToListAsync();
     }
+
+    public async Task<OrganizationMember?> GetByUserIdAndOrganizationIdAsync(string userId, Guid organizationId)
+    {
+        return await _context.OrganizationMembers
+            .FirstOrDefaultAsync(om => om.UserId == userId && om.OrganizationId == organizationId);
+    }
 }

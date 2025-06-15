@@ -18,6 +18,7 @@ public class TicketDbContext : DbContext
     public DbSet<TicketAssignment> TicketAssignments { get; set; } = null!;
     public DbSet<TicketHistory> TicketHistories { get; set; } = null!;
     public DbSet<Notification> Notifications { get; set; } = null!;
+    public DbSet<SystemAdmin> SystemAdmins { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

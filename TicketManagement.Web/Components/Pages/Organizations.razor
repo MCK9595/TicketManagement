@@ -277,7 +277,17 @@ else
                 }
                 else
                 {
-                    errorMessage = response?.Message ?? "Failed to update organization. Please try again.";
+                    if (response?.Errors?.Any() == true)
+                    {
+                        errorMessage = string.Join(" ", response.Errors);
+                    }
+                    else
+                    {
+                        errorMessage = response?.Message ?? "Failed to update organization. Please try again.";
+                    }
+                    Logger.LogWarning("Failed to update organization: {Message}, Errors: {Errors}", 
+                        response?.Message, 
+                        response?.Errors != null ? string.Join(", ", response.Errors) : "None");
                 }
             }
             else
@@ -299,7 +309,17 @@ else
                 }
                 else
                 {
-                    errorMessage = response?.Message ?? "Failed to create organization. Please try again.";
+                    if (response?.Errors?.Any() == true)
+                    {
+                        errorMessage = string.Join(" ", response.Errors);
+                    }
+                    else
+                    {
+                        errorMessage = response?.Message ?? "Failed to create organization. Please try again.";
+                    }
+                    Logger.LogWarning("Failed to create organization: {Message}, Errors: {Errors}", 
+                        response?.Message, 
+                        response?.Errors != null ? string.Join(", ", response.Errors) : "None");
                 }
             }
         }

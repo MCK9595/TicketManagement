@@ -162,11 +162,16 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("ProjectMemberRole", policy =>
         policy.Requirements.Add(new TicketManagement.ApiService.Authorization.ProjectRoleRequirement(TicketManagement.Core.Enums.ProjectRole.Member)))
     .AddPolicy("ProjectViewer", policy =>
-        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.ProjectRoleRequirement(TicketManagement.Core.Enums.ProjectRole.Viewer)));
+        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.ProjectRoleRequirement(TicketManagement.Core.Enums.ProjectRole.Viewer)))
+    
+    // System-level policies
+    .AddPolicy("SystemAdmin", policy =>
+        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.SystemRoleRequirement(TicketManagement.Core.Enums.SystemRole.SystemAdmin)));
 
 // Register authorization handlers
 builder.Services.AddScoped<IAuthorizationHandler, TicketManagement.ApiService.Authorization.OrganizationRoleHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, TicketManagement.ApiService.Authorization.ProjectRoleHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, TicketManagement.ApiService.Authorization.SystemRoleHandler>();
 
 // Register repositories
 builder.Services.AddScoped(typeof(IRepository<,>), typeof(Repository<,>));
