@@ -236,15 +236,33 @@ public class TicketManagementApiClient
         try
         {
             var response = await _httpClient.PostAsJsonAsync($"api/tickets/project/{projectId}", createTicket);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            Console.WriteLine($"CreateTicket Response - Status: {response.StatusCode}, Content: {content}");
+            
             if (response.IsSuccessStatusCode)
             {
-                var content = await response.Content.ReadAsStringAsync();
                 return JsonSerializer.Deserialize<ApiResponseDto<TicketDto>>(content, _jsonOptions);
             }
-            return null;
+            else
+            {
+                // Try to deserialize error response
+                try
+                {
+                    var errorResponse = JsonSerializer.Deserialize<ApiResponseDto<TicketDto>>(content, _jsonOptions);
+                    Console.WriteLine($"CreateTicket Error Response: Success={errorResponse?.Success}, Message='{errorResponse?.Message}', Errors={errorResponse?.Errors?.Count}");
+                    return errorResponse;
+                }
+                catch
+                {
+                    Console.WriteLine($"Failed to parse error response: {content}");
+                    return null;
+                }
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Console.WriteLine($"CreateTicket Exception: {ex.Message}");
             return null;
         }
     }

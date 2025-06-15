@@ -36,10 +36,19 @@ public class TicketTitleAttribute : ValidationAttribute
     {
         if (value is string title)
         {
-            return !string.IsNullOrWhiteSpace(title) && 
-                   title.Length <= 200 && 
-                   title.Trim().Length >= 3;
+            var isValid = !string.IsNullOrWhiteSpace(title) && 
+                         title.Length <= 200 && 
+                         title.Trim().Length >= 3;
+            
+            if (!isValid)
+            {
+                System.Diagnostics.Debug.WriteLine($"TicketTitle validation failed: Value='{title}', Length={title?.Length}, TrimmedLength={title?.Trim().Length}");
+            }
+            
+            return isValid;
         }
+        
+        System.Diagnostics.Debug.WriteLine($"TicketTitle validation failed: Value is not string, Type={value?.GetType()}");
         return false;
     }
 
@@ -91,7 +100,8 @@ public class FutureDateAttribute : ValidationAttribute
     {
         if (value is DateTime dateTime)
         {
-            return dateTime > DateTime.UtcNow;
+            // Allow dates that are at least 1 minute in the future to account for processing time
+            return dateTime > DateTime.UtcNow.AddMinutes(-1);
         }
         return true; // nullは有効（任意フィールド）
     }

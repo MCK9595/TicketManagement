@@ -464,14 +464,25 @@ else
             {
                 Title = ticketForm.Title,
                 Description = ticketForm.Description,
-                Priority = Enum.Parse<TicketManagement.Core.Enums.TicketPriority>(ticketForm.Priority)
+                Priority = Enum.Parse<TicketManagement.Core.Enums.TicketPriority>(ticketForm.Priority),
+                Category = string.Empty, // デフォルト値を設定
+                Tags = Array.Empty<string>() // 空配列を設定
             };
+
+            Logger.LogDebug("Creating ticket with data: Title='{Title}', Description='{Description}', Priority={Priority}, Category='{Category}', Tags={Tags}",
+                createDto.Title, createDto.Description, createDto.Priority, createDto.Category, createDto.Tags.Length);
 
             var response = await ApiClient.CreateTicketAsync(ProjectId, createDto);
             if (response?.Success == true)
             {
+                Logger.LogInformation("Ticket created successfully for project {ProjectId}", ProjectId);
                 HideCreateTicketModal();
                 await LoadTickets();
+            }
+            else
+            {
+                Logger.LogWarning("Ticket creation failed for project {ProjectId}. Response: Success={Success}, Message='{Message}', Errors={Errors}",
+                    ProjectId, response?.Success, response?.Message, response?.Errors != null ? string.Join("; ", response.Errors) : "none");
             }
         }
         catch (Exception ex)

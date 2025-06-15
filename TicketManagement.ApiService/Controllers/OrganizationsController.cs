@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using TicketManagement.ApiService.Common;
 using TicketManagement.Contracts.DTOs;
 using TicketManagement.Contracts.Services;
 using TicketManagement.Core.Enums;
@@ -200,13 +201,14 @@ public class OrganizationsController : ControllerBase
                     .SelectMany(v => v.Errors)
                     .Select(e => e.ErrorMessage)
                     .ToList();
-                _logger.LogWarning("Invalid model state for CreateOrganization: {Errors}", string.Join(", ", errors));
+                _logger.LogDebug("Model validation failed for CreateOrganization: {Errors}", string.Join(", ", errors));
                 return BadRequest(ApiResponseDto<OrganizationDto>.ErrorResult(errors));
             }
 
             var userId = GetCurrentUserId();
-            _logger.LogInformation("Creating organization: Name={Name}, DisplayName={DisplayName}, UserId={UserId}", 
+            _logger.LogDebug("Creating organization: Name={Name}, DisplayName={DisplayName}, UserId={UserId}", 
                 dto.Name, dto.DisplayName, userId);
+            
             var organization = await _organizationService.CreateOrganizationAsync(
                 dto.Name, 
                 dto.DisplayName, 
@@ -228,20 +230,17 @@ public class OrganizationsController : ControllerBase
                 CurrentMembers = 1 // Creator
             };
 
+            _logger.LogInformation("Organization '{Name}' created successfully with ID {OrganizationId}", 
+                dto.Name, organization.Id);
+
             return CreatedAtAction(
                 nameof(GetOrganization), 
                 new { id = organization.Id }, 
                 ApiResponseDto<OrganizationDto>.SuccessResult(orgDto, "Organization created successfully"));
         }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Invalid operation while creating organization");
-            return BadRequest(ApiResponseDto<OrganizationDto>.ErrorResult(ex.Message));
-        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating organization");
-            return StatusCode(500, ApiResponseDto<OrganizationDto>.ErrorResult("Internal server error"));
+            return ErrorHandler.HandleException<OrganizationDto>(ex, _logger, "CreateOrganization");
         }
     }
 

@@ -44,17 +44,29 @@ public class TicketService : ITicketService
         string[] tags = null, 
         DateTime? dueDate = null)
     {
+        _logger.LogDebug("Creating ticket in project {ProjectId}: Title='{Title}', Priority={Priority}, Category='{Category}', Tags={Tags}, CreatedBy={CreatedBy}",
+            projectId, title, priority, category, tags != null ? string.Join(",", tags) : "none", createdBy);
+
         // Validate input
         if (string.IsNullOrWhiteSpace(title))
+        {
+            _logger.LogWarning("Ticket creation failed: Title is empty");
             throw new ArgumentException("Title cannot be empty", nameof(title));
+        }
         
         if (string.IsNullOrWhiteSpace(createdBy))
+        {
+            _logger.LogWarning("Ticket creation failed: CreatedBy is empty");
             throw new ArgumentException("CreatedBy cannot be empty", nameof(createdBy));
+        }
 
         // Validate project exists
         var project = await _projectRepository.GetByIdAsync(projectId);
         if (project == null)
+        {
+            _logger.LogWarning("Ticket creation failed: Project {ProjectId} not found", projectId);
             throw new ArgumentException($"Project with ID {projectId} not found.", nameof(projectId));
+        }
 
         var ticket = new Ticket
         {

@@ -187,15 +187,27 @@ builder.Services.AddScoped<ITicketHistoryRepository, TicketHistoryRepository>();
 // Add comprehensive logging system
 builder.Services.AddStructuredLogging(builder.Configuration);
 
-// Register services
-builder.Services.AddScoped<ICacheService, CacheService>();
-builder.Services.AddScoped<IOrganizationService, OrganizationService>();
-builder.Services.AddScoped<ITicketService, TicketService>();
-builder.Services.AddScoped<IProjectService, ProjectService>();
+// Register services with improved lifetime management
+builder.Services.AddSingleton<ICacheService, CacheService>(); // Cache service should be singleton
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IRealtimeNotificationService, SignalRNotificationService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+
+// Register CQRS-based organization services
+builder.Services.AddScoped<TicketManagement.Contracts.Commands.IOrganizationCommandService, 
+    TicketManagement.Infrastructure.Services.Commands.OrganizationCommandService>();
+builder.Services.AddScoped<TicketManagement.Contracts.Queries.IOrganizationQueryService, 
+    TicketManagement.Infrastructure.Services.Queries.OrganizationQueryService>();
+builder.Services.AddScoped<TicketManagement.Contracts.Queries.IOrganizationAuthorizationService, 
+    TicketManagement.Infrastructure.Services.Authorization.OrganizationAuthorizationService>();
+
+// Register composite service for backward compatibility
+builder.Services.AddScoped<IOrganizationService, TicketManagement.Infrastructure.Services.OrganizationServiceComposite>();
+
+// Register other services (to be refactored)
+builder.Services.AddScoped<ITicketService, TicketService>();
+builder.Services.AddScoped<IProjectService, ProjectService>();
 
 // Register HttpClient for UserManagementService
 builder.Services.AddHttpClient<UserManagementService>();

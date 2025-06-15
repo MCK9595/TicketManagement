@@ -207,19 +207,28 @@ public class TicketsController : ControllerBase
     {
         try
         {
+            _logger.LogDebug("Creating ticket for project {ProjectId} with data: {@CreateTicketDto}", projectId, dto);
+            
             if (!ModelState.IsValid)
             {
                 var errors = ModelState.Values
                     .SelectMany(v => v.Errors)
                     .Select(e => e.ErrorMessage)
                     .ToList();
+                
+                // Detailed validation error logging
+                _logger.LogWarning("Ticket creation validation failed for project {ProjectId}. Errors: {Errors}. ModelState: {@ModelState}",
+                    projectId, string.Join("; ", errors), ModelState.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Errors.Select(e => e.ErrorMessage)));
+                
                 return BadRequest(ApiResponseDto<TicketDto>.ErrorResult(errors));
             }
 
             var userId = GetCurrentUserId();
+            _logger.LogDebug("User {UserId} attempting to create ticket in project {ProjectId}", userId, projectId);
             
             if (!await _projectService.CanUserAccessProjectAsync(projectId, userId))
             {
+                _logger.LogWarning("User {UserId} denied access to project {ProjectId} for ticket creation", userId, projectId);
                 return Forbid();
             }
 
