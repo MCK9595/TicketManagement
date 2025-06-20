@@ -148,6 +148,15 @@ public static class LoggingMiddlewareExtensions
     }
 
     /// <summary>
+    /// リクエストログミドルウェアを追加
+    /// </summary>
+    public static IApplicationBuilder UseRequestLogging(this IApplicationBuilder app)
+    {
+        app.UseMiddleware<RequestLoggingMiddleware>();
+        return app;
+    }
+
+    /// <summary>
     /// 認証ログミドルウェアを追加
     /// </summary>
     public static IApplicationBuilder UseAuthenticationLogging(this IApplicationBuilder app)
@@ -162,6 +171,15 @@ public static class LoggingMiddlewareExtensions
     public static IApplicationBuilder UsePerformanceMonitoring(this IApplicationBuilder app)
     {
         app.UseMiddleware<PerformanceMonitoringMiddleware>();
+        return app;
+    }
+
+    /// <summary>
+    /// レート制限ミドルウェアを追加
+    /// </summary>
+    public static IApplicationBuilder UseRateLimiting(this IApplicationBuilder app)
+    {
+        app.UseMiddleware<RateLimitingMiddleware>();
         return app;
     }
 }

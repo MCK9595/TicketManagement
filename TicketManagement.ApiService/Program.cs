@@ -315,10 +315,10 @@ app.UsePerformanceMonitoring();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
 // Add request logging
-app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseRequestLogging();
 
 // Add rate limiting
-app.UseMiddleware<RateLimitingMiddleware>();
+app.UseRateLimiting();
 
 // Use CORS
 app.UseCors("DefaultPolicy");

@@ -1,5 +1,6 @@
 using TicketManagement.Web.Components;
 using TicketManagement.Web.Services;
+using TicketManagement.Web.Client.Services;
 using TicketManagement.Web.Authentication;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -24,7 +25,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<AuthorizationHandler>();
 
 // Configure HttpClient for API calls with authorization
-builder.Services.AddHttpClient<TicketManagementApiClient>(client =>
+builder.Services.AddHttpClient<TicketManagement.Web.Client.Services.TicketManagementApiClient>(client =>
 {
     client.BaseAddress = new("https+http://apiservice");
 })
@@ -142,7 +143,8 @@ builder.Services.AddScoped<KeycloakAuthenticationEvents>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddInteractiveWebAssemblyComponents();
 
 // Add MVC for authentication controllers
 builder.Services.AddControllers();
@@ -156,7 +158,7 @@ builder.Services.AddCascadingAuthenticationState();
 
 
 // Add SignalR notification service
-builder.Services.AddScoped<NotificationHubService>();
+builder.Services.AddScoped<TicketManagement.Web.Client.Services.NotificationHubService>();
 
 // Add HTTP client factory for health checks
 builder.Services.AddHttpClient();
@@ -215,7 +217,22 @@ authGroup.MapPost("/logout", () =>
         [CookieAuthenticationDefaults.AuthenticationScheme, oidcScheme]));
 
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode()
+    .AddInteractiveWebAssemblyRenderMode()
+    .AddAdditionalAssemblies(typeof(TicketManagement.Web.Client._Imports).Assembly);
+
+// Map authentication state provider for WebAssembly
+app.MapGet("authentication/user", async (HttpContext context) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        var claims = context.User.Claims.Select(c => new { c.Type, c.Value }).ToArray();
+        return Results.Json(new { IsAuthenticated = true, Claims = claims });
+    }
+    
+    return Results.Json(new { IsAuthenticated = false, Claims = Array.Empty<object>() });
+}).AllowAnonymous();
+
 
 // Map controller routes for authentication
 app.MapControllers();

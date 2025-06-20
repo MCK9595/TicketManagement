@@ -9,12 +9,14 @@
   <ItemGroup>
     <ProjectReference Include="..\TicketManagement.ServiceDefaults\TicketManagement.ServiceDefaults.csproj" />
     <ProjectReference Include="..\src\TicketManagement.Contracts\TicketManagement.Contracts.csproj" />
+    <ProjectReference Include="..\TicketManagement.Web.Client\TicketManagement.Web.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Aspire.Keycloak.Authentication" Version="9.3.1-preview.1.25305.6" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="9.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="9.0.0" />
   </ItemGroup>
 
 </Project>

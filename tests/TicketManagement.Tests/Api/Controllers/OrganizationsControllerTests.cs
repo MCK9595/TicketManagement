@@ -149,12 +149,25 @@ public class OrganizationsControllerTests
             Id = organizationId,
             Name = "Test Organization",
             DisplayName = "Test Org",
-            IsActive = true
+            IsActive = true,
+            Members = new List<OrganizationMember>()
         };
 
         _organizationServiceMock
-            .Setup(s => s.GetOrganizationAsync(organizationId))
+            .Setup(s => s.CanUserAccessOrganizationAsync(organizationId, "test-user-id"))
+            .ReturnsAsync(true);
+
+        _organizationServiceMock
+            .Setup(s => s.GetOrganizationWithDetailsAsync(organizationId))
             .ReturnsAsync(organization);
+
+        _organizationServiceMock
+            .Setup(s => s.GetProjectLimitsAsync(organizationId))
+            .ReturnsAsync((0, 10));
+
+        _organizationServiceMock
+            .Setup(s => s.GetMemberLimitsAsync(organizationId))
+            .ReturnsAsync((1, 50));
 
         // Act
         var result = await _controller.GetOrganization(organizationId);
@@ -176,8 +189,13 @@ public class OrganizationsControllerTests
     {
         // Arrange
         var organizationId = Guid.NewGuid();
+        
         _organizationServiceMock
-            .Setup(s => s.GetOrganizationAsync(organizationId))
+            .Setup(s => s.CanUserAccessOrganizationAsync(organizationId, "test-user-id"))
+            .ReturnsAsync(true);
+
+        _organizationServiceMock
+            .Setup(s => s.GetOrganizationWithDetailsAsync(organizationId))
             .ReturnsAsync((Organization?)null);
 
         // Act

@@ -1,12 +1,11 @@
 ﻿@page "/"
-@using TicketManagement.Web.Services
+@using TicketManagement.Web.Client.Services
 @using TicketManagement.Contracts.DTOs
 @using Microsoft.AspNetCore.Authorization
 @using TicketManagement.Web.Components.Shared
 @inject TicketManagementApiClient ApiClient
 @inject NavigationManager Navigation
 @attribute [Authorize]
-@rendermode InteractiveServer
 
 <PageTitle>Dashboard - Ticket Management</PageTitle>
 
@@ -212,7 +211,26 @@
                                             </small>
                                         </div>
                                         <p class="mb-1 text-muted">@ticket.ProjectName</p>
-                                        <small class="text-muted">Priority: @ticket.Priority</small>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">Priority: @ticket.Priority</small>
+                                            @if (ticket.Assignments?.Any() == true)
+                                            {
+                                                <div class="d-flex align-items-center">
+                                                    @foreach (var assignment in ticket.Assignments.Take(2))
+                                                    {
+                                                        <span class="avatar avatar-sm rounded-circle bg-primary text-white me-1" 
+                                                              style="width: 20px; height: 20px; font-size: 0.7rem;"
+                                                              title="@assignment.AssigneeName">
+                                                            @(string.IsNullOrEmpty(assignment.AssigneeName) ? "?" : assignment.AssigneeName.Substring(0, 1).ToUpper())
+                                                        </span>
+                                                    }
+                                                    @if (ticket.Assignments.Count > 2)
+                                                    {
+                                                        <span class="text-muted small">+@(ticket.Assignments.Count - 2)</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
                                     </a>
                                 }
                             </div>

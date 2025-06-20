@@ -147,7 +147,7 @@ public class TicketServiceTests
         var newPriority = TicketPriority.High;
         var updatedBy = "updater";
 
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync(existingTicket);
 
         _mockTicketRepository.Setup(r => r.UpdateAsync(It.IsAny<Ticket>()))
@@ -176,7 +176,7 @@ public class TicketServiceTests
         // Arrange
         var ticketId = Guid.NewGuid();
         
-        _mockTicketRepository.Setup(r => r.GetByIdAsync(ticketId))
+        _mockTicketRepository.Setup(r => r.GetByIdAsyncNoTracking(ticketId))
             .ReturnsAsync((Ticket)null!);
 
         // Act & Assert

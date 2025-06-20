@@ -49,8 +49,11 @@ public class ProjectServiceTests
             IsActive = true
         };
 
-        _mockProjectRepository.Setup(r => r.GetByIdAsync(projectId))
+        _mockProjectRepository.Setup(r => r.GetProjectWithMembersAsync(projectId))
             .ReturnsAsync(expectedProject);
+
+        _mockCacheService.Setup(c => c.GetAsync<Project>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(null as Project);
 
         // Act
         var result = await _service.GetProjectAsync(projectId);
@@ -66,8 +69,11 @@ public class ProjectServiceTests
     {
         // Arrange
         var projectId = Guid.NewGuid();
-        _mockProjectRepository.Setup(r => r.GetByIdAsync(projectId))
+        _mockProjectRepository.Setup(r => r.GetProjectWithMembersAsync(projectId))
             .ReturnsAsync((Project)null!);
+
+        _mockCacheService.Setup(c => c.GetAsync<Project>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(null as Project);
 
         // Act
         var result = await _service.GetProjectAsync(projectId);
@@ -189,7 +195,7 @@ public class ProjectServiceTests
     {
         // Arrange
         var userId = "test-user";
-        var expectedProjects = new[]
+        var expectedProjects = new List<Project>
         {
             new Project { Id = Guid.NewGuid(), Name = "Project 1", CreatedBy = "creator1", CreatedAt = DateTime.UtcNow },
             new Project { Id = Guid.NewGuid(), Name = "Project 2", CreatedBy = "creator2", CreatedAt = DateTime.UtcNow }
@@ -201,6 +207,9 @@ public class ProjectServiceTests
 
         _mockProjectRepository.Setup(r => r.GetProjectsByUserIdAsync(userId))
             .ReturnsAsync(expectedProjects);
+
+        _mockCacheService.Setup(c => c.SetAsync(It.IsAny<string>(), It.IsAny<IEnumerable<Project>>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         // Act
         var result = await _service.GetProjectsByUserAsync(userId);

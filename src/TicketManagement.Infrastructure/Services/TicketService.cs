@@ -107,7 +107,7 @@ public class TicketService : ITicketService
         DateTime? dueDate, 
         string updatedBy)
     {
-        var ticket = await _ticketRepository.GetByIdAsync(ticketId);
+        var ticket = await _ticketRepository.GetByIdAsyncNoTracking(ticketId);
         if (ticket == null)
         {
             throw new ArgumentException($"Ticket with ID {ticketId} not found.", nameof(ticketId));
@@ -193,7 +193,7 @@ public class TicketService : ITicketService
 
     public async Task<Ticket> AssignTicketAsync(Guid ticketId, string assigneeId, string assignedBy)
     {
-        var ticket = await _ticketRepository.GetByIdAsync(ticketId);
+        var ticket = await _ticketRepository.GetByIdAsyncNoTracking(ticketId);
         if (ticket == null)
         {
             throw new ArgumentException($"Ticket with ID {ticketId} not found.", nameof(ticketId));
@@ -234,7 +234,9 @@ public class TicketService : ITicketService
             NotificationType.TicketAssigned, 
             ticketId);
 
-        return ticket;
+        // Return fresh ticket with assignments included
+        var updatedTicket = await _ticketRepository.GetByIdAsync(ticketId);
+        return updatedTicket ?? ticket;
     }
 
     public async Task RemoveTicketAssignmentAsync(Guid ticketId, string assigneeId, string removedBy)
@@ -260,7 +262,7 @@ public class TicketService : ITicketService
         if (string.IsNullOrWhiteSpace(authorId))
             throw new ArgumentException("AuthorId cannot be empty", nameof(authorId));
 
-        var ticket = await _ticketRepository.GetByIdAsync(ticketId);
+        var ticket = await _ticketRepository.GetByIdAsyncNoTracking(ticketId);
         if (ticket == null)
         {
             throw new ArgumentException($"Ticket with ID {ticketId} not found.", nameof(ticketId));
@@ -374,7 +376,7 @@ public class TicketService : ITicketService
 
     public async Task DeleteTicketAsync(Guid ticketId, string deletedBy)
     {
-        var ticket = await _ticketRepository.GetByIdAsync(ticketId);
+        var ticket = await _ticketRepository.GetByIdAsyncNoTracking(ticketId);
         if (ticket == null)
         {
             throw new ArgumentException($"Ticket with ID {ticketId} not found.", nameof(ticketId));
@@ -402,7 +404,7 @@ public class TicketService : ITicketService
 
     public async Task<bool> CanUserAccessTicketAsync(Guid ticketId, string userId)
     {
-        var ticket = await _ticketRepository.GetByIdAsync(ticketId);
+        var ticket = await _ticketRepository.GetByIdAsyncNoTracking(ticketId);
         if (ticket == null) return false;
 
         return await _projectRepository.IsUserMemberOfProjectAsync(ticket.ProjectId, userId);
@@ -410,7 +412,7 @@ public class TicketService : ITicketService
 
     public async Task<bool> CanUserDeleteTicketAsync(Guid ticketId, string userId)
     {
-        var ticket = await _ticketRepository.GetByIdAsync(ticketId);
+        var ticket = await _ticketRepository.GetByIdAsyncNoTracking(ticketId);
         if (ticket == null) return false;
 
         // チケットの作成者は削除可能

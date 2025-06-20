@@ -37,6 +37,24 @@ public class TicketsController : ControllerBase
                throw new UnauthorizedAccessException("User ID not found in token");
     }
 
+    private async Task<List<TicketAssignmentDto>> MapTicketAssignmentDtosAsync(IEnumerable<TicketManagement.Core.Entities.TicketAssignment> assignments)
+    {
+        if (!assignments.Any()) return new List<TicketAssignmentDto>();
+
+        var assigneeIds = assignments.Select(a => a.AssigneeId).Distinct().ToList();
+        var users = await _userManagementService.GetUsersByIdsAsync(assigneeIds);
+
+        return assignments.Select(a => new TicketAssignmentDto
+        {
+            Id = a.Id,
+            TicketId = a.TicketId,
+            AssigneeId = a.AssigneeId,
+            AssignedAt = a.AssignedAt,
+            AssignedBy = a.AssignedBy,
+            AssigneeName = users.TryGetValue(a.AssigneeId, out var user) ? user.DisplayName ?? user.Username : a.AssigneeId
+        }).ToList();
+    }
+
     /// <summary>
     /// プロジェクトのチケット一覧を検索・取得
     /// </summary>
@@ -69,32 +87,30 @@ public class TicketsController : ControllerBase
 
             var result = await _ticketService.SearchTicketsAsync(projectId, criteria, filter.Page, filter.PageSize);
             
-            var ticketDtos = result.Items.Select(t => new TicketDto
+            var ticketDtos = new List<TicketDto>();
+            foreach (var ticket in result.Items)
             {
-                Id = t.Id,
-                ProjectId = t.ProjectId,
-                Title = t.Title,
-                Description = t.Description,
-                Status = t.Status,
-                Priority = t.Priority,
-                Category = t.Category,
-                Tags = t.Tags,
-                CreatedAt = t.CreatedAt,
-                CreatedBy = t.CreatedBy,
-                UpdatedAt = t.UpdatedAt,
-                UpdatedBy = t.UpdatedBy,
-                DueDate = t.DueDate,
-                Assignments = t.Assignments.Select(a => new TicketAssignmentDto
+                var assignments = await MapTicketAssignmentDtosAsync(ticket.Assignments);
+                ticketDtos.Add(new TicketDto
                 {
-                    Id = a.Id,
-                    TicketId = a.TicketId,
-                    AssigneeId = a.AssigneeId,
-                    AssignedAt = a.AssignedAt,
-                    AssignedBy = a.AssignedBy
-                }).ToList(),
-                CommentCount = t.Comments?.Count ?? 0,
-                ProjectName = t.Project?.Name ?? ""
-            }).ToList();
+                    Id = ticket.Id,
+                    ProjectId = ticket.ProjectId,
+                    Title = ticket.Title,
+                    Description = ticket.Description,
+                    Status = ticket.Status,
+                    Priority = ticket.Priority,
+                    Category = ticket.Category,
+                    Tags = ticket.Tags,
+                    CreatedAt = ticket.CreatedAt,
+                    CreatedBy = ticket.CreatedBy,
+                    UpdatedAt = ticket.UpdatedAt,
+                    UpdatedBy = ticket.UpdatedBy,
+                    DueDate = ticket.DueDate,
+                    Assignments = assignments,
+                    CommentCount = ticket.Comments?.Count ?? 0,
+                    ProjectName = ticket.Project?.Name ?? ""
+                });
+            }
 
             var pagedResult = new PagedResultDto<TicketDto>
             {
@@ -138,6 +154,9 @@ public class TicketsController : ControllerBase
             var commentUserIds = ticket.Comments?.Select(c => c.AuthorId).Distinct().ToList() ?? new List<string>();
             var users = await _userManagementService.GetUsersByIdsAsync(commentUserIds);
 
+            // Map assignments with user names
+            var assignments = await MapTicketAssignmentDtosAsync(ticket.Assignments);
+
             var ticketDetailDto = new TicketDetailDto
             {
                 Id = ticket.Id,
@@ -153,14 +172,7 @@ public class TicketsController : ControllerBase
                 UpdatedAt = ticket.UpdatedAt,
                 UpdatedBy = ticket.UpdatedBy,
                 DueDate = ticket.DueDate,
-                Assignments = ticket.Assignments.Select(a => new TicketAssignmentDto
-                {
-                    Id = a.Id,
-                    TicketId = a.TicketId,
-                    AssigneeId = a.AssigneeId,
-                    AssignedAt = a.AssignedAt,
-                    AssignedBy = a.AssignedBy
-                }).ToList(),
+                Assignments = assignments,
                 CommentCount = ticket.Comments?.Count ?? 0,
                 ProjectName = ticket.Project?.Name ?? "",
                 Comments = ticket.Comments?.Select(c => new CommentDto
@@ -307,6 +319,8 @@ public class TicketsController : ControllerBase
                 dto.DueDate,
                 userId);
 
+            var assignments = await MapTicketAssignmentDtosAsync(ticket.Assignments);
+
             var ticketDto = new TicketDto
             {
                 Id = ticket.Id,
@@ -322,14 +336,7 @@ public class TicketsController : ControllerBase
                 UpdatedAt = ticket.UpdatedAt,
                 UpdatedBy = ticket.UpdatedBy,
                 DueDate = ticket.DueDate,
-                Assignments = ticket.Assignments.Select(a => new TicketAssignmentDto
-                {
-                    Id = a.Id,
-                    TicketId = a.TicketId,
-                    AssigneeId = a.AssigneeId,
-                    AssignedAt = a.AssignedAt,
-                    AssignedBy = a.AssignedBy
-                }).ToList(),
+                Assignments = assignments,
                 CommentCount = ticket.Comments?.Count ?? 0,
                 ProjectName = ticket.Project?.Name ?? ""
             };
@@ -375,6 +382,8 @@ public class TicketsController : ControllerBase
 
             var ticket = await _ticketService.UpdateTicketStatusAsync(id, dto.Status, userId);
 
+            var assignments = await MapTicketAssignmentDtosAsync(ticket.Assignments);
+
             var ticketDto = new TicketDto
             {
                 Id = ticket.Id,
@@ -390,14 +399,7 @@ public class TicketsController : ControllerBase
                 UpdatedAt = ticket.UpdatedAt,
                 UpdatedBy = ticket.UpdatedBy,
                 DueDate = ticket.DueDate,
-                Assignments = ticket.Assignments.Select(a => new TicketAssignmentDto
-                {
-                    Id = a.Id,
-                    TicketId = a.TicketId,
-                    AssigneeId = a.AssigneeId,
-                    AssignedAt = a.AssignedAt,
-                    AssignedBy = a.AssignedBy
-                }).ToList(),
+                Assignments = assignments,
                 CommentCount = ticket.Comments?.Count ?? 0,
                 ProjectName = ticket.Project?.Name ?? ""
             };
@@ -454,13 +456,18 @@ public class TicketsController : ControllerBase
                 return StatusCode(500, ApiResponseDto<TicketAssignmentDto>.ErrorResult("Assignment creation failed"));
             }
 
+            // Get user name for the assignment
+            var users = await _userManagementService.GetUsersByIdsAsync(new[] { assignment.AssigneeId });
+            var assigneeName = users.TryGetValue(assignment.AssigneeId, out var user) ? user.DisplayName ?? user.Username : assignment.AssigneeId;
+
             var assignmentDto = new TicketAssignmentDto
             {
                 Id = assignment.Id,
                 TicketId = assignment.TicketId,
                 AssigneeId = assignment.AssigneeId,
                 AssignedAt = assignment.AssignedAt,
-                AssignedBy = assignment.AssignedBy
+                AssignedBy = assignment.AssignedBy,
+                AssigneeName = assigneeName
             };
 
             return ApiResponseDto<TicketAssignmentDto>.SuccessResult(assignmentDto, "Ticket assigned successfully");
@@ -477,6 +484,117 @@ public class TicketsController : ControllerBase
         {
             _logger.LogError(ex, "Error assigning ticket {TicketId}", id);
             return StatusCode(500, ApiResponseDto<TicketAssignmentDto>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// チケットをアサイン（簡易版）
+    /// </summary>
+    [HttpPost("{id:guid}/assign")]
+    public async Task<ActionResult<ApiResponseDto<TicketAssignmentDto>>> AssignTicketSimple(
+        Guid id, 
+        [FromBody] AssignTicketDto dto)
+    {
+        try
+        {
+            _logger.LogInformation("AssignTicketSimple called for ticket {TicketId} with AssigneeId: {AssigneeId}", id, dto?.AssigneeId);
+
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage)
+                    .ToList();
+                _logger.LogWarning("AssignTicketSimple validation failed: {Errors}", string.Join(", ", errors));
+                return BadRequest(ApiResponseDto<TicketAssignmentDto>.ErrorResult(errors));
+            }
+
+            var userId = GetCurrentUserId();
+            _logger.LogDebug("Current user: {UserId}", userId);
+            
+            if (!await _ticketService.CanUserAccessTicketAsync(id, userId))
+            {
+                _logger.LogWarning("User {UserId} denied access to ticket {TicketId}", userId, id);
+                return Forbid();
+            }
+
+            // 空のAssigneeIdの場合は全てのアサインを削除
+            if (string.IsNullOrEmpty(dto.AssigneeId))
+            {
+                _logger.LogInformation("Removing all assignments from ticket {TicketId}", id);
+                
+                // 既存のアサインメントを全て削除
+                var existingTicket = await _ticketService.GetTicketAsync(id);
+                if (existingTicket?.Assignments?.Any() == true)
+                {
+                    _logger.LogDebug("Found {AssignmentCount} existing assignments", existingTicket.Assignments.Count());
+                    foreach (var assignment in existingTicket.Assignments.ToList())
+                    {
+                        _logger.LogDebug("Removing assignment for assignee {AssigneeId}", assignment.AssigneeId);
+                        await _ticketService.RemoveTicketAssignmentAsync(id, assignment.AssigneeId, userId);
+                    }
+                }
+                
+                _logger.LogInformation("All assignments removed from ticket {TicketId}", id);
+                return ApiResponseDto<TicketAssignmentDto>.SuccessResult(new TicketAssignmentDto(), "All assignments removed successfully");
+            }
+
+            _logger.LogInformation("Assigning ticket {TicketId} to user {AssigneeId}", id, dto.AssigneeId);
+
+            // 既存のアサインメントを削除してから新しいアサインメントを追加
+            var ticket = await _ticketService.GetTicketAsync(id);
+            if (ticket?.Assignments?.Any() == true)
+            {
+                _logger.LogDebug("Removing {AssignmentCount} existing assignments before new assignment", ticket.Assignments.Count());
+                foreach (var assignment in ticket.Assignments.ToList())
+                {
+                    _logger.LogDebug("Removing existing assignment for assignee {AssigneeId}", assignment.AssigneeId);
+                    await _ticketService.RemoveTicketAssignmentAsync(id, assignment.AssigneeId, userId);
+                }
+            }
+
+            // 新しいアサインメントを追加
+            _logger.LogDebug("Creating new assignment for ticket {TicketId} to user {AssigneeId}", id, dto.AssigneeId);
+            var updatedTicket = await _ticketService.AssignTicketAsync(id, dto.AssigneeId, userId);
+
+            var newAssignment = updatedTicket.Assignments.LastOrDefault();
+            if (newAssignment == null)
+            {
+                _logger.LogError("Assignment creation failed for ticket {TicketId}", id);
+                return StatusCode(500, ApiResponseDto<TicketAssignmentDto>.ErrorResult("Assignment creation failed"));
+            }
+
+            // Get user name for the assignment
+            var users = await _userManagementService.GetUsersByIdsAsync(new[] { newAssignment.AssigneeId });
+            var assigneeName = users.TryGetValue(newAssignment.AssigneeId, out var user) ? user.DisplayName ?? user.Username : newAssignment.AssigneeId;
+
+            var assignmentDto = new TicketAssignmentDto
+            {
+                Id = newAssignment.Id,
+                TicketId = newAssignment.TicketId,
+                AssigneeId = newAssignment.AssigneeId,
+                AssignedAt = newAssignment.AssignedAt,
+                AssignedBy = newAssignment.AssignedBy,
+                AssigneeName = assigneeName
+            };
+
+            _logger.LogInformation("Ticket {TicketId} successfully assigned to user {AssigneeId}", id, dto.AssigneeId);
+            return ApiResponseDto<TicketAssignmentDto>.SuccessResult(assignmentDto, "Ticket assigned successfully");
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "ArgumentException in AssignTicketSimple for ticket {TicketId}: {Message}", id, ex.Message);
+            return NotFound(ApiResponseDto<TicketAssignmentDto>.ErrorResult(ex.Message));
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "InvalidOperationException in AssignTicketSimple for ticket {TicketId}: {Message}", id, ex.Message);
+            return BadRequest(ApiResponseDto<TicketAssignmentDto>.ErrorResult(ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error in AssignTicketSimple for ticket {TicketId}: {Message}", id, ex.Message);
+            return StatusCode(500, ApiResponseDto<TicketAssignmentDto>.ErrorResult($"Internal server error: {ex.Message}"));
         }
     }
 
@@ -522,32 +640,30 @@ public class TicketsController : ControllerBase
             var userId = GetCurrentUserId();
             var tickets = await _ticketService.GetTicketsByAssigneeAsync(userId);
 
-            var ticketDtos = tickets.Select(t => new TicketDto
+            var ticketDtos = new List<TicketDto>();
+            foreach (var ticket in tickets)
             {
-                Id = t.Id,
-                ProjectId = t.ProjectId,
-                Title = t.Title,
-                Description = t.Description,
-                Status = t.Status,
-                Priority = t.Priority,
-                Category = t.Category,
-                Tags = t.Tags,
-                CreatedAt = t.CreatedAt,
-                CreatedBy = t.CreatedBy,
-                UpdatedAt = t.UpdatedAt,
-                UpdatedBy = t.UpdatedBy,
-                DueDate = t.DueDate,
-                Assignments = t.Assignments.Select(a => new TicketAssignmentDto
+                var assignments = await MapTicketAssignmentDtosAsync(ticket.Assignments);
+                ticketDtos.Add(new TicketDto
                 {
-                    Id = a.Id,
-                    TicketId = a.TicketId,
-                    AssigneeId = a.AssigneeId,
-                    AssignedAt = a.AssignedAt,
-                    AssignedBy = a.AssignedBy
-                }).ToList(),
-                CommentCount = t.Comments?.Count ?? 0,
-                ProjectName = t.Project?.Name ?? ""
-            }).ToList();
+                    Id = ticket.Id,
+                    ProjectId = ticket.ProjectId,
+                    Title = ticket.Title,
+                    Description = ticket.Description,
+                    Status = ticket.Status,
+                    Priority = ticket.Priority,
+                    Category = ticket.Category,
+                    Tags = ticket.Tags,
+                    CreatedAt = ticket.CreatedAt,
+                    CreatedBy = ticket.CreatedBy,
+                    UpdatedAt = ticket.UpdatedAt,
+                    UpdatedBy = ticket.UpdatedBy,
+                    DueDate = ticket.DueDate,
+                    Assignments = assignments,
+                    CommentCount = ticket.Comments?.Count ?? 0,
+                    ProjectName = ticket.Project?.Name ?? ""
+                });
+            }
 
             return ApiResponseDto<List<TicketDto>>.SuccessResult(ticketDtos);
         }
@@ -569,32 +685,30 @@ public class TicketsController : ControllerBase
             var userId = GetCurrentUserId();
             var tickets = await _ticketService.GetRecentTicketsAsync(userId, count);
 
-            var ticketDtos = tickets.Select(t => new TicketDto
+            var ticketDtos = new List<TicketDto>();
+            foreach (var ticket in tickets)
             {
-                Id = t.Id,
-                ProjectId = t.ProjectId,
-                Title = t.Title,
-                Description = t.Description,
-                Status = t.Status,
-                Priority = t.Priority,
-                Category = t.Category,
-                Tags = t.Tags,
-                CreatedAt = t.CreatedAt,
-                CreatedBy = t.CreatedBy,
-                UpdatedAt = t.UpdatedAt,
-                UpdatedBy = t.UpdatedBy,
-                DueDate = t.DueDate,
-                Assignments = t.Assignments.Select(a => new TicketAssignmentDto
+                var assignments = await MapTicketAssignmentDtosAsync(ticket.Assignments);
+                ticketDtos.Add(new TicketDto
                 {
-                    Id = a.Id,
-                    TicketId = a.TicketId,
-                    AssigneeId = a.AssigneeId,
-                    AssignedAt = a.AssignedAt,
-                    AssignedBy = a.AssignedBy
-                }).ToList(),
-                CommentCount = t.Comments?.Count ?? 0,
-                ProjectName = t.Project?.Name ?? ""
-            }).ToList();
+                    Id = ticket.Id,
+                    ProjectId = ticket.ProjectId,
+                    Title = ticket.Title,
+                    Description = ticket.Description,
+                    Status = ticket.Status,
+                    Priority = ticket.Priority,
+                    Category = ticket.Category,
+                    Tags = ticket.Tags,
+                    CreatedAt = ticket.CreatedAt,
+                    CreatedBy = ticket.CreatedBy,
+                    UpdatedAt = ticket.UpdatedAt,
+                    UpdatedBy = ticket.UpdatedBy,
+                    DueDate = ticket.DueDate,
+                    Assignments = assignments,
+                    CommentCount = ticket.Comments?.Count ?? 0,
+                    ProjectName = ticket.Project?.Name ?? ""
+                });
+            }
 
             return ApiResponseDto<List<TicketDto>>.SuccessResult(ticketDtos);
         }

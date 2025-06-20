@@ -94,8 +94,7 @@ public class TicketAssignmentDto
 
 public class AssignTicketDto
 {
-    [Required]
-    public string AssigneeId { get; set; } = string.Empty;
+    public string? AssigneeId { get; set; }
 }
 
 public class TicketHistoryDto

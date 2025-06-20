@@ -1,26 +1,37 @@
 ﻿<CascadingAuthenticationState>
-    <Router AppAssembly="typeof(Program).Assembly">
+    <Router AppAssembly="@typeof(Program).Assembly" AdditionalAssemblies="@(new[] { typeof(TicketManagement.Web.Client._Imports).Assembly })">
         <Found Context="routeData">
-            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="@typeof(Layout.MainLayout)">
                 <NotAuthorized>
                     <PageTitle>Access Denied</PageTitle>
-                    <LayoutView Layout="typeof(Layout.MainLayout)">
+                    <LayoutView Layout="@typeof(Layout.MainLayout)">
                         <div class="text-center py-5">
                             <span class="bi bi-shield-lock fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
                             <h3>Access Denied</h3>
                             <p class="text-muted mb-4">You need to log in to access this page.</p>
-                            <a href="/login" class="btn btn-primary">
+                            <a href="/authentication/login" class="btn btn-primary">
                                 <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login
                             </a>
                         </div>
                     </LayoutView>
                 </NotAuthorized>
+                <Authorizing>
+                    <div class="d-flex justify-content-center align-items-center" style="min-height: 50vh;">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <h4>Checking authentication...</h4>
+                            <p class="text-muted">Please wait while we verify your access.</p>
+                        </div>
+                    </div>
+                </Authorizing>
             </AuthorizeRouteView>
             <FocusOnNavigate RouteData="routeData" Selector="h1" />
         </Found>
         <NotFound>
             <PageTitle>Not found</PageTitle>
-            <LayoutView Layout="typeof(Layout.MainLayout)">
+            <LayoutView Layout="@typeof(Layout.MainLayout)">
                 <div class="text-center py-5">
                     <span class="bi bi-exclamation-triangle fs-1 text-muted d-block mb-3" aria-hidden="true"></span>
                     <h3>Page not found</h3>

@@ -2,7 +2,7 @@ using TicketManagement.Contracts.DTOs;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace TicketManagement.Web.Services;
+namespace TicketManagement.Web.Client.Services;
 
 public class TicketManagementApiClient
 {

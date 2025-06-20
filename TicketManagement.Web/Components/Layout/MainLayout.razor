@@ -1,15 +1,15 @@
-﻿@using TicketManagement.Web.Services
+﻿@using TicketManagement.Web.Client.Services
 @using TicketManagement.Contracts.DTOs
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Authentication
 @using TicketManagement.Web.Components.Shared
 @inherits LayoutComponentBase
-@inject NotificationHubService NotificationHub
+@inject NotificationHubService? NotificationHub
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JSRuntime
 @inject IHttpContextAccessor HttpContextAccessor
 @inject IConfiguration Configuration
-@inject TicketManagementApiClient ApiClient
+@inject TicketManagementApiClient? ApiClient
 @inject ILogger<MainLayout> Logger
 @implements IAsyncDisposable
 
@@ -86,8 +86,11 @@
     protected override async Task OnInitializedAsync()
     {
         // Subscribe to notification events
-        NotificationHub.NotificationReceived += OnNotificationReceived;
-        NotificationHub.UnreadCountUpdated += OnUnreadCountUpdated;
+        if (NotificationHub != null)
+        {
+            NotificationHub.NotificationReceived += OnNotificationReceived;
+            NotificationHub.UnreadCountUpdated += OnUnreadCountUpdated;
+        }
 
         // Check if user is authenticated and start SignalR connection
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -120,10 +123,13 @@
                 Console.WriteLine("Warning: No access token available for SignalR connection");
             }
             
-            await NotificationHub.StartAsync(apiBaseUrl, accessToken);
-            
-            // Get initial unread count
-            unreadCount = await NotificationHub.GetUnreadCountAsync();
+            if (NotificationHub != null)
+            {
+                await NotificationHub.StartAsync(apiBaseUrl, accessToken);
+                
+                // Get initial unread count
+                unreadCount = await NotificationHub.GetUnreadCountAsync();
+            }
             StateHasChanged();
         }
         catch (Exception ex)
@@ -232,14 +238,13 @@
     public async ValueTask DisposeAsync()
     {
         // Unsubscribe from events
-        NotificationHub.NotificationReceived -= OnNotificationReceived;
-        NotificationHub.UnreadCountUpdated -= OnUnreadCountUpdated;
-        
-        toastTimer?.Dispose();
-        
         if (NotificationHub != null)
         {
+            NotificationHub.NotificationReceived -= OnNotificationReceived;
+            NotificationHub.UnreadCountUpdated -= OnUnreadCountUpdated;
             await NotificationHub.DisposeAsync();
         }
+        
+        toastTimer?.Dispose();
     }
 }

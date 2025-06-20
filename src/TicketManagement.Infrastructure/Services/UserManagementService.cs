@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using TicketManagement.Contracts.Services;
@@ -56,11 +57,15 @@ public class UserManagementService : IUserManagementService
         _configuration = configuration;
 
         // Configure HttpClient for Keycloak API
-        // Use Aspire service discovery URL with port
-        var keycloakBaseUrl = "http://keycloak:8080";
+        // Get Keycloak URL from connection string (Aspire service discovery) or configuration
+        var keycloakBaseUrl = GetKeycloakBaseUrl();
         var realm = _configuration["Keycloak:Realm"] ?? "ticket-management";
         
+        _logger.LogInformation("Configuring UserManagementService with Keycloak URL: {KeycloakUrl}", keycloakBaseUrl);
         _httpClient.BaseAddress = new Uri($"{keycloakBaseUrl}/admin/realms/{realm}/");
+        
+        // Set timeout for Keycloak operations
+        _httpClient.Timeout = TimeSpan.FromSeconds(30);
         _httpClient.DefaultRequestHeaders.Accept.Clear();
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
@@ -350,16 +355,25 @@ public class UserManagementService : IUserManagementService
         }
     }
 
+    private string? _cachedToken;
+    private DateTime _tokenExpiry = DateTime.MinValue;
+
     private async Task<string?> GetServiceAccountTokenAsync()
     {
         try
         {
+            // Check if we have a cached token that's still valid
+            if (!string.IsNullOrEmpty(_cachedToken) && DateTime.UtcNow < _tokenExpiry.AddMinutes(-1))
+            {
+                return _cachedToken;
+            }
+
             // Use client credentials flow for service account
             var clientId = _configuration["Keycloak:AdminClientId"] ?? "ticket-management-service";
             var clientSecret = _configuration["Keycloak:AdminClientSecret"] ?? "ticket-management-service-secret";
 
-            // Use Aspire service discovery URL with port
-            var keycloakBaseUrl = "http://keycloak:8080";
+            // Get Keycloak URL from connection string (Aspire service discovery) or configuration
+            var keycloakBaseUrl = GetKeycloakBaseUrl();
             var realm = _configuration["Keycloak:Realm"] ?? "ticket-management";
             
             var formData = new List<KeyValuePair<string, string>>
@@ -369,30 +383,46 @@ public class UserManagementService : IUserManagementService
                 new("client_secret", clientSecret)
             };
 
-            // Temporarily clear the Authorization header to avoid token conflicts
-            var originalAuth = _httpClient.DefaultRequestHeaders.Authorization;
-            _httpClient.DefaultRequestHeaders.Authorization = null;
+            // Create a new HttpClient for token requests to avoid header conflicts
+            using var tokenClient = new HttpClient();
+            tokenClient.DefaultRequestHeaders.Accept.Clear();
+            tokenClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             var tokenUrl = $"{keycloakBaseUrl}/realms/{realm}/protocol/openid-connect/token";
             _logger.LogDebug("Requesting service account token from: {TokenUrl}", tokenUrl);
             _logger.LogDebug("Using client credentials: ClientId={ClientId}", clientId);
             
-            var response = await _httpClient.PostAsync(tokenUrl, new FormUrlEncodedContent(formData));
-
-            // Restore the original Authorization header
-            _httpClient.DefaultRequestHeaders.Authorization = originalAuth;
+            // Set timeout for token requests
+            tokenClient.Timeout = TimeSpan.FromSeconds(30);
+            
+            var response = await tokenClient.PostAsync(tokenUrl, new FormUrlEncodedContent(formData));
+            var content = await response.Content.ReadAsStringAsync();
+            
+            _logger.LogDebug("Token request response: StatusCode={StatusCode}, IsSuccessStatusCode={IsSuccessStatusCode}", 
+                response.StatusCode, response.IsSuccessStatusCode);
 
             if (response.IsSuccessStatusCode)
             {
-                var content = await response.Content.ReadAsStringAsync();
-                _logger.LogDebug("Token response received successfully");
+                _logger.LogInformation("Successfully received service account token from Keycloak");
                 var tokenResponse = JsonSerializer.Deserialize<TokenResponseDto>(content, _jsonOptions);
-                return tokenResponse?.AccessToken;
+                
+                if (tokenResponse != null && !string.IsNullOrEmpty(tokenResponse.AccessToken))
+                {
+                    _cachedToken = tokenResponse.AccessToken;
+                    _tokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
+                    _logger.LogDebug("Token cached successfully, expires at: {ExpiryTime}", _tokenExpiry);
+                    return _cachedToken;
+                }
+                else
+                {
+                    _logger.LogError("Token response parsing failed: AccessToken is null or empty");
+                }
             }
-
-            var errorContent = await response.Content.ReadAsStringAsync();
-            _logger.LogError("Failed to get service account token: {StatusCode}, Response: {ErrorContent}", 
-                response.StatusCode, errorContent);
+            else
+            {
+                _logger.LogError("Failed to get service account token: {StatusCode}, Response: {ErrorContent}", 
+                    response.StatusCode, content);
+            }
             return null;
         }
         catch (Exception ex)
@@ -495,8 +525,13 @@ public class UserManagementService : IUserManagementService
 
     private class TokenResponseDto
     {
+        [JsonPropertyName("access_token")]
         public string AccessToken { get; set; } = string.Empty;
+        
+        [JsonPropertyName("token_type")]
         public string TokenType { get; set; } = string.Empty;
+        
+        [JsonPropertyName("expires_in")]
         public int ExpiresIn { get; set; }
     }
 
@@ -920,5 +955,40 @@ public class UserManagementService : IUserManagementService
             _logger.LogError(ex, "Error adding user {UserId} to organization {OrganizationId}", userId, organizationId);
             return false;
         }
+    }
+    
+    /// <summary>
+    /// Gets the Keycloak base URL with proper fallback logic for Aspire service discovery
+    /// </summary>
+    private string GetKeycloakBaseUrl()
+    {
+        // Try Aspire service discovery connection string first
+        var connectionString = _configuration.GetConnectionString("keycloak");
+        if (!string.IsNullOrEmpty(connectionString))
+        {
+            _logger.LogDebug("Using Keycloak connection string from Aspire: {ConnectionString}", connectionString);
+            return connectionString.TrimEnd('/');
+        }
+        
+        // Try explicit authority configuration
+        var authority = _configuration["Keycloak:Authority"];
+        if (!string.IsNullOrEmpty(authority))
+        {
+            _logger.LogDebug("Using Keycloak authority from configuration: {Authority}", authority);
+            return authority.TrimEnd('/');
+        }
+        
+        // Try base URL configuration
+        var baseUrl = _configuration["Authentication:Keycloak:BaseUrl"];
+        if (!string.IsNullOrEmpty(baseUrl))
+        {
+            _logger.LogDebug("Using Keycloak base URL from configuration: {BaseUrl}", baseUrl);
+            return baseUrl.TrimEnd('/');
+        }
+        
+        // Final fallback - use localhost for development
+        var fallbackUrl = "http://localhost:8080";
+        _logger.LogWarning("No Keycloak configuration found, using fallback URL: {FallbackUrl}", fallbackUrl);
+        return fallbackUrl;
     }
 }

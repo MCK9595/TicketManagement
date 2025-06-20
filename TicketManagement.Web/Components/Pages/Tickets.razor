@@ -1,5 +1,5 @@
 ﻿@page "/tickets"
-@using TicketManagement.Web.Services
+@using TicketManagement.Web.Client.Services
 @using TicketManagement.Contracts.DTOs
 @inject TicketManagementApiClient ApiClient
 @inject NavigationManager Navigation
@@ -170,7 +170,21 @@ else if (filteredTickets?.Any() == true)
                                 <td>
                                     @if (ticket.Assignments?.Any() == true)
                                     {
-                                        <span class="text-muted">@ticket.Assignments.Count assigned</span>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-group">
+                                                @foreach (var assignment in ticket.Assignments.Take(3))
+                                                {
+                                                    <span class="avatar avatar-sm rounded-circle bg-primary text-white me-1" 
+                                                          title="@assignment.AssigneeName">
+                                                        @(string.IsNullOrEmpty(assignment.AssigneeName) ? "?" : assignment.AssigneeName.Substring(0, 1).ToUpper())
+                                                    </span>
+                                                }
+                                            </div>
+                                            @if (ticket.Assignments.Count > 3)
+                                            {
+                                                <span class="ms-2 text-muted small">+@(ticket.Assignments.Count - 3)</span>
+                                            }
+                                        </div>
                                     }
                                     else
                                     {

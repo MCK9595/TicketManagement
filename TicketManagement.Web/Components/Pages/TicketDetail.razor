@@ -1,11 +1,10 @@
 ﻿@page "/tickets/{TicketId:guid}"
-@using TicketManagement.Web.Services
+@using TicketManagement.Web.Client.Services
 @using TicketManagement.Contracts.DTOs
 @inject TicketManagementApiClient ApiClient
 @inject NavigationManager Navigation
 @inject ILogger<TicketDetail> Logger
 @attribute [Authorize]
-@rendermode InteractiveServer
 
 <PageTitle>@(ticket?.Title ?? "Ticket") - Ticket Management</PageTitle>
 
@@ -86,7 +85,19 @@ else if (ticket != null)
                         <div class="col-sm-9">
                             @if (ticket.Assignments?.Any() == true)
                             {
-                                <span class="text-muted">@ticket.Assignments.Count assigned</span>
+                                <div class="d-flex align-items-center flex-wrap">
+                                    @foreach (var assignment in ticket.Assignments)
+                                    {
+                                        <div class="d-flex align-items-center me-3 mb-2">
+                                            <span class="avatar avatar-sm rounded-circle bg-primary text-white me-2" 
+                                                  title="@assignment.AssigneeName">
+                                                @(string.IsNullOrEmpty(assignment.AssigneeName) ? "?" : assignment.AssigneeName.Substring(0, 1).ToUpper())
+                                            </span>
+                                            <span class="text-dark">@assignment.AssigneeName</span>
+                                            <small class="text-muted ms-2">(@assignment.AssignedAt.ToString("MMM dd"))</small>
+                                        </div>
+                                    }
+                                </div>
                             }
                             else
                             {
@@ -174,6 +185,9 @@ else if (ticket != null)
                         </button>
                         <button class="btn btn-outline-warning" @onclick="ShowChangePriorityModal">
                             <span class="bi bi-exclamation-triangle" aria-hidden="true"></span> Change Priority
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="ShowAssignTicketModal">
+                            <span class="bi bi-person-plus" aria-hidden="true"></span> Assign/Reassign
                         </button>
                         <button class="btn btn-outline-success" @onclick="ShowAddCommentModal">
                             <span class="bi bi-chat-left-text" aria-hidden="true"></span> Add Comment
@@ -413,6 +427,53 @@ else
     </div>
 }
 
+<!-- Assign Ticket Modal -->
+@if (showAssignTicketModal)
+{
+    <div class="modal fade show" style="display: block; background-color: rgba(0,0,0,0.5);" tabindex="-1" @onclick="HandleAssignModalBackdropClick">
+        <div class="modal-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assign/Reassign Ticket</h5>
+                    <button type="button" class="btn-close" @onclick="HideAssignTicketModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="assignTicketForm" OnValidSubmit="AssignTicket">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+
+                        <div class="mb-3">
+                            <label for="assignee" class="form-label">Assign To</label>
+                            <InputSelect id="assignee" class="form-select" @bind-Value="assignTicketForm.AssigneeId">
+                                <option value="">-- Unassigned --</option>
+                                @if (projectMembers != null)
+                                {
+                                    @foreach (var member in projectMembers)
+                                    {
+                                        <option value="@member.UserId">@member.UserName</option>
+                                    }
+                                }
+                            </InputSelect>
+                            <div class="form-text">Select a project member to assign this ticket to.</div>
+                        </div>
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @onclick="HideAssignTicketModal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@isAssigningTicket">
+                                @if (isAssigningTicket)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                }
+                                Assign Ticket
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <!-- Delete Ticket Modal -->
 @if (showDeleteTicketModal)
 {
@@ -463,15 +524,20 @@ else
     private bool showAddCommentModal = false;
     private bool showChangeStatusModal = false;
     private bool showChangePriorityModal = false;
+    private bool showAssignTicketModal = false;
     private bool isUpdatingTicket = false;
     private bool isAddingComment = false;
     private bool isChangingStatus = false;
     private bool isChangingPriority = false;
+    private bool isAssigningTicket = false;
 
     private EditTicketFormModel editTicketForm = new();
     private AddCommentFormModel addCommentForm = new();
     private ChangeStatusFormModel changeStatusForm = new();
     private ChangePriorityFormModel changePriorityForm = new();
+    private AssignTicketFormModel assignTicketForm = new();
+
+    private List<ProjectMemberDto>? projectMembers;
 
     protected override async Task OnInitializedAsync()
     {
@@ -486,6 +552,12 @@ else
             if (response?.Success == true && response.Data != null)
             {
                 ticket = response.Data;
+                
+                // Load project members for assignment dropdown
+                if (ticket.ProjectId != Guid.Empty)
+                {
+                    await LoadProjectMembers(ticket.ProjectId);
+                }
             }
         }
         catch (Exception ex)
@@ -495,6 +567,22 @@ else
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task LoadProjectMembers(Guid projectId)
+    {
+        try
+        {
+            var response = await ApiClient.GetProjectAsync(projectId);
+            if (response?.Success == true && response.Data != null)
+            {
+                projectMembers = response.Data.Members?.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading project members for project {ProjectId}", projectId);
         }
     }
 
@@ -746,6 +834,58 @@ else
         }
     }
 
+    private void ShowAssignTicketModal()
+    {
+        assignTicketForm = new AssignTicketFormModel();
+        showAssignTicketModal = true;
+    }
+
+    private void HideAssignTicketModal()
+    {
+        showAssignTicketModal = false;
+        assignTicketForm = new AssignTicketFormModel();
+    }
+
+    private void HandleAssignModalBackdropClick()
+    {
+        HideAssignTicketModal();
+    }
+
+    private async Task AssignTicket()
+    {
+        if (ticket == null) return;
+
+        isAssigningTicket = true;
+        try
+        {
+            var assignDto = new AssignTicketDto
+            {
+                AssigneeId = assignTicketForm.AssigneeId
+            };
+
+            var response = await ApiClient.AssignTicketAsync(TicketId, assignDto);
+            if (response?.Success == true)
+            {
+                Logger.LogInformation("Ticket {TicketId} assigned successfully", TicketId);
+                HideAssignTicketModal();
+                await LoadTicket(); // Reload to show updated assignment
+            }
+            else
+            {
+                Logger.LogWarning("Failed to assign ticket {TicketId}. Response: {Message}", 
+                    TicketId, response?.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error assigning ticket {TicketId}", TicketId);
+        }
+        finally
+        {
+            isAssigningTicket = false;
+        }
+    }
+
     private class EditTicketFormModel
     {
         [Required]
@@ -775,6 +915,11 @@ else
     private class ChangePriorityFormModel
     {
         public string Priority { get; set; } = "Medium";
+    }
+
+    private class AssignTicketFormModel
+    {
+        public string? AssigneeId { get; set; }
     }
 
     // Delete Ticket Modal

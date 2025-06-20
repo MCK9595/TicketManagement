@@ -108,7 +108,7 @@ public class ProjectService : IProjectService
             return cachedProject;
         }
 
-        var project = await _projectRepository.GetByIdAsync(projectId);
+        var project = await _projectRepository.GetProjectWithMembersAsync(projectId);
         if (project != null)
         {
             await _cacheService.SetAsync(cacheKey, project, TimeSpan.FromMinutes(30));

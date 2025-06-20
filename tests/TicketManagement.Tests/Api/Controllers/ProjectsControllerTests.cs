@@ -16,6 +16,7 @@ namespace TicketManagement.Tests.Api.Controllers;
 public class ProjectsControllerTests
 {
     private Mock<IProjectService> _mockProjectService;
+    private Mock<IUserManagementService> _mockUserManagementService;
     private Mock<ILogger<ProjectsController>> _mockLogger;
     private ProjectsController _controller;
     private string _userId;
@@ -24,8 +25,9 @@ public class ProjectsControllerTests
     public void Setup()
     {
         _mockProjectService = new Mock<IProjectService>();
+        _mockUserManagementService = new Mock<IUserManagementService>();
         _mockLogger = new Mock<ILogger<ProjectsController>>();
-        _controller = new ProjectsController(_mockProjectService.Object, _mockLogger.Object);
+        _controller = new ProjectsController(_mockProjectService.Object, _mockUserManagementService.Object, _mockLogger.Object);
         _userId = "test-user-id";
 
         // Setup user context
@@ -44,6 +46,14 @@ public class ProjectsControllerTests
                 User = principal
             }
         };
+
+        // Setup UserManagementService mock
+        var users = new Dictionary<string, UserDto>
+        {
+            { _userId, new UserDto { Id = _userId, Username = "testuser", Email = "test@example.com" } }
+        };
+        _mockUserManagementService.Setup(x => x.GetUsersByIdsAsync(It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(users);
     }
 
     [Test]

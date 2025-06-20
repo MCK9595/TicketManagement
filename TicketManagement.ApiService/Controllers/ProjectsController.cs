@@ -13,11 +13,13 @@ namespace TicketManagement.ApiService.Controllers;
 public class ProjectsController : ControllerBase
 {
     private readonly IProjectService _projectService;
+    private readonly IUserManagementService _userManagementService;
     private readonly ILogger<ProjectsController> _logger;
 
-    public ProjectsController(IProjectService projectService, ILogger<ProjectsController> logger)
+    public ProjectsController(IProjectService projectService, IUserManagementService userManagementService, ILogger<ProjectsController> logger)
     {
         _projectService = projectService;
+        _userManagementService = userManagementService;
         _logger = logger;
     }
 
@@ -38,6 +40,23 @@ public class ProjectsController : ControllerBase
         return userId;
     }
 
+    private async Task<List<ProjectMemberDto>> MapProjectMemberDtosAsync(IEnumerable<TicketManagement.Core.Entities.ProjectMember> members)
+    {
+        var userIds = members.Select(m => m.UserId).Distinct().ToList();
+        var users = await _userManagementService.GetUsersByIdsAsync(userIds);
+
+        return members.Select(m => new ProjectMemberDto
+        {
+            Id = m.Id,
+            ProjectId = m.ProjectId,
+            UserId = m.UserId,
+            Role = m.Role,
+            JoinedAt = m.JoinedAt,
+            UserName = users.TryGetValue(m.UserId, out var user) ? user.Username : m.UserId,
+            Email = users.TryGetValue(m.UserId, out var userEmail) ? userEmail.Email ?? string.Empty : string.Empty
+        }).ToList();
+    }
+
     /// <summary>
     /// ユーザーが参加しているプロジェクト一覧を取得
     /// </summary>
@@ -49,26 +68,26 @@ public class ProjectsController : ControllerBase
             var userId = GetCurrentUserId();
             var projects = await _projectService.GetProjectsByUserAsync(userId);
             
-            var projectDtos = projects.Select(p => new ProjectDto
+            var projectDtos = new List<ProjectDto>();
+            
+            foreach (var p in projects)
             {
-                Id = p.Id,
-                OrganizationId = p.OrganizationId,
-                OrganizationName = p.Organization?.Name ?? string.Empty,
-                Name = p.Name,
-                Description = p.Description,
-                CreatedAt = p.CreatedAt,
-                CreatedBy = p.CreatedBy,
-                IsActive = p.IsActive,
-                Members = p.Members.Select(m => new ProjectMemberDto
+                var members = await MapProjectMemberDtosAsync(p.Members);
+                
+                projectDtos.Add(new ProjectDto
                 {
-                    Id = m.Id,
-                    ProjectId = m.ProjectId,
-                    UserId = m.UserId,
-                    Role = m.Role,
-                    JoinedAt = m.JoinedAt
-                }).ToList(),
-                TicketCount = p.Tickets?.Count ?? 0
-            }).ToList();
+                    Id = p.Id,
+                    OrganizationId = p.OrganizationId,
+                    OrganizationName = p.Organization?.Name ?? string.Empty,
+                    Name = p.Name,
+                    Description = p.Description,
+                    CreatedAt = p.CreatedAt,
+                    CreatedBy = p.CreatedBy,
+                    IsActive = p.IsActive,
+                    Members = members,
+                    TicketCount = p.Tickets?.Count ?? 0
+                });
+            }
 
             _logger.LogInformation("Returning {ProjectCount} projects for user {UserId}", projectDtos.Count, userId);
             var result = ApiResponseDto<List<ProjectDto>>.SuccessResult(projectDtos);
@@ -115,6 +134,8 @@ public class ProjectsController : ControllerBase
                 return NotFound(ApiResponseDto<ProjectDto>.ErrorResult("Project not found"));
             }
 
+            var members = await MapProjectMemberDtosAsync(project.Members);
+            
             var projectDto = new ProjectDto
             {
                 Id = project.Id,
@@ -124,14 +145,7 @@ public class ProjectsController : ControllerBase
                 CreatedAt = project.CreatedAt,
                 CreatedBy = project.CreatedBy,
                 IsActive = project.IsActive,
-                Members = project.Members.Select(m => new ProjectMemberDto
-                {
-                    Id = m.Id,
-                    ProjectId = m.ProjectId,
-                    UserId = m.UserId,
-                    Role = m.Role,
-                    JoinedAt = m.JoinedAt
-                }).ToList(),
+                Members = members,
                 TicketCount = project.Tickets?.Count ?? 0
             };
 
@@ -175,6 +189,8 @@ public class ProjectsController : ControllerBase
             _logger.LogInformation("Creating project for user: {UserId} in organization: {OrganizationId}", userId, dto.OrganizationId);
             var project = await _projectService.CreateProjectAsync(dto.OrganizationId, dto.Name, dto.Description, userId);
 
+            var members = await MapProjectMemberDtosAsync(project.Members);
+            
             var projectDto = new ProjectDto
             {
                 Id = project.Id,
@@ -185,14 +201,7 @@ public class ProjectsController : ControllerBase
                 CreatedAt = project.CreatedAt,
                 CreatedBy = project.CreatedBy,
                 IsActive = project.IsActive,
-                Members = project.Members.Select(m => new ProjectMemberDto
-                {
-                    Id = m.Id,
-                    ProjectId = m.ProjectId,
-                    UserId = m.UserId,
-                    Role = m.Role,
-                    JoinedAt = m.JoinedAt
-                }).ToList(),
+                Members = members,
                 TicketCount = 0
             };
 
@@ -246,6 +255,7 @@ public class ProjectsController : ControllerBase
             }
 
             var project = await _projectService.UpdateProjectAsync(id, dto.Name, dto.Description, userId);
+            var members = await MapProjectMemberDtosAsync(project.Members);
 
             var projectDto = new ProjectDto
             {
@@ -255,14 +265,7 @@ public class ProjectsController : ControllerBase
                 CreatedAt = project.CreatedAt,
                 CreatedBy = project.CreatedBy,
                 IsActive = project.IsActive,
-                Members = project.Members.Select(m => new ProjectMemberDto
-                {
-                    Id = m.Id,
-                    ProjectId = m.ProjectId,
-                    UserId = m.UserId,
-                    Role = m.Role,
-                    JoinedAt = m.JoinedAt
-                }).ToList(),
+                Members = members,
                 TicketCount = project.Tickets?.Count ?? 0
             };
 
@@ -295,14 +298,7 @@ public class ProjectsController : ControllerBase
             }
 
             var members = await _projectService.GetProjectMembersAsync(id);
-            var memberDtos = members.Select(m => new ProjectMemberDto
-            {
-                Id = m.Id,
-                ProjectId = m.ProjectId,
-                UserId = m.UserId,
-                Role = m.Role,
-                JoinedAt = m.JoinedAt
-            }).ToList();
+            var memberDtos = await MapProjectMemberDtosAsync(members);
 
             return ApiResponseDto<List<ProjectMemberDto>>.SuccessResult(memberDtos);
         }
@@ -339,15 +335,8 @@ public class ProjectsController : ControllerBase
             }
 
             var member = await _projectService.AddMemberAsync(id, dto.UserId, dto.Role, userId);
-
-            var memberDto = new ProjectMemberDto
-            {
-                Id = member.Id,
-                ProjectId = member.ProjectId,
-                UserId = member.UserId,
-                Role = member.Role,
-                JoinedAt = member.JoinedAt
-            };
+            var memberDtos = await MapProjectMemberDtosAsync(new[] { member });
+            var memberDto = memberDtos.First();
 
             return ApiResponseDto<ProjectMemberDto>.SuccessResult(memberDto, "Member added successfully");
         }
@@ -393,15 +382,8 @@ public class ProjectsController : ControllerBase
             }
 
             var member = await _projectService.UpdateMemberRoleAsync(id, userId, dto.Role, currentUserId);
-
-            var memberDto = new ProjectMemberDto
-            {
-                Id = member.Id,
-                ProjectId = member.ProjectId,
-                UserId = member.UserId,
-                Role = member.Role,
-                JoinedAt = member.JoinedAt
-            };
+            var memberDtos = await MapProjectMemberDtosAsync(new[] { member });
+            var memberDto = memberDtos.First();
 
             return ApiResponseDto<ProjectMemberDto>.SuccessResult(memberDto, "Member role updated successfully");
         }

@@ -1,5 +1,5 @@
 @page "/projects/{ProjectId:guid}"
-@using TicketManagement.Web.Services
+@using TicketManagement.Web.Client.Services
 @using TicketManagement.Contracts.DTOs
 @using System.ComponentModel.DataAnnotations
 @inject TicketManagementApiClient ApiClient
@@ -7,7 +7,6 @@
 @inject ILogger<ProjectDetail> Logger
 @inject IJSRuntime JSRuntime
 @attribute [Authorize]
-@rendermode InteractiveServer
 
 <PageTitle>@(project?.Name ?? "Project") - Ticket Management</PageTitle>
 
@@ -296,6 +295,20 @@ else
                             </InputSelect>
                         </div>
 
+                        <div class="mb-3">
+                            <label for="ticketAssignee" class="form-label">Assign To (Optional)</label>
+                            <InputSelect id="ticketAssignee" class="form-select" @bind-Value="ticketForm.AssigneeId">
+                                <option value="">-- Unassigned --</option>
+                                @if (projectMembers != null)
+                                {
+                                    @foreach (var member in projectMembers)
+                                    {
+                                        <option value="@member.UserId">@member.UserName</option>
+                                    }
+                                }
+                            </InputSelect>
+                        </div>
+
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" @onclick="HideCreateTicketModal">Cancel</button>
                             <button type="submit" class="btn btn-primary" disabled="@isCreatingTicket">
@@ -359,6 +372,7 @@ else
 
     private ProjectDto? project;
     private List<TicketDto>? tickets;
+    private List<ProjectMemberDto>? projectMembers;
     private bool isLoading = true;
     private bool showCreateTicketModal = false;
     private bool isCreatingTicket = false;
@@ -379,6 +393,7 @@ else
             if (response?.Success == true && response.Data != null)
             {
                 project = response.Data;
+                projectMembers = response.Data.Members?.ToList();
             }
         }
         catch (Exception ex)
@@ -469,13 +484,32 @@ else
                 Tags = Array.Empty<string>() // 空配列を設定
             };
 
-            Logger.LogDebug("Creating ticket with data: Title='{Title}', Description='{Description}', Priority={Priority}, Category='{Category}', Tags={Tags}",
-                createDto.Title, createDto.Description, createDto.Priority, createDto.Category, createDto.Tags.Length);
+            Logger.LogDebug("Creating ticket with data: Title='{Title}', Description='{Description}', Priority={Priority}, Category='{Category}', Tags={Tags}, AssigneeId='{AssigneeId}'",
+                createDto.Title, createDto.Description, createDto.Priority, createDto.Category, createDto.Tags.Length, ticketForm.AssigneeId);
 
             var response = await ApiClient.CreateTicketAsync(ProjectId, createDto);
-            if (response?.Success == true)
+            if (response?.Success == true && response.Data != null)
             {
-                Logger.LogInformation("Ticket created successfully for project {ProjectId}", ProjectId);
+                Logger.LogInformation("Ticket created successfully for project {ProjectId} with ID {TicketId}", ProjectId, response.Data.Id);
+                
+                // Assign the ticket if an assignee was selected
+                if (!string.IsNullOrEmpty(ticketForm.AssigneeId))
+                {
+                    Logger.LogDebug("Assigning ticket {TicketId} to user {AssigneeId}", response.Data.Id, ticketForm.AssigneeId);
+                    var assignDto = new AssignTicketDto { AssigneeId = ticketForm.AssigneeId };
+                    var assignResponse = await ApiClient.AssignTicketAsync(response.Data.Id, assignDto);
+                    
+                    if (assignResponse?.Success == true)
+                    {
+                        Logger.LogInformation("Ticket {TicketId} assigned successfully to user {AssigneeId}", response.Data.Id, ticketForm.AssigneeId);
+                    }
+                    else
+                    {
+                        Logger.LogWarning("Failed to assign ticket {TicketId} to user {AssigneeId}. Response: {Message}", 
+                            response.Data.Id, ticketForm.AssigneeId, assignResponse?.Message);
+                    }
+                }
+                
                 HideCreateTicketModal();
                 await LoadTickets();
             }
@@ -530,6 +564,8 @@ else
         public string Description { get; set; } = string.Empty;
 
         public string Priority { get; set; } = "Medium";
+        
+        public string? AssigneeId { get; set; }
     }
 
     // Delete Project Modal
