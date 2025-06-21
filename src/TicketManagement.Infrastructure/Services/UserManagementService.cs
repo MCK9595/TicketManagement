@@ -938,11 +938,24 @@ public class UserManagementService : IUserManagementService
                 return true; // Already a member
             }
 
+            // Fetch user details from Keycloak to populate member information
+            UserDto? userInfo = null;
+            try
+            {
+                userInfo = await GetUserByIdAsync(userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not fetch user details from Keycloak for user {UserId}, using fallback values", userId);
+            }
+
             var member = new OrganizationMember
             {
                 Id = Guid.NewGuid(),
                 OrganizationId = organizationId,
                 UserId = userId,
+                UserName = userInfo?.DisplayName ?? userInfo?.Username ?? $"User-{userId[..Math.Min(8, userId.Length)]}",
+                UserEmail = userInfo?.Email,
                 Role = role,
                 JoinedAt = DateTime.UtcNow
             };
@@ -954,6 +967,57 @@ public class UserManagementService : IUserManagementService
         {
             _logger.LogError(ex, "Error adding user {UserId} to organization {OrganizationId}", userId, organizationId);
             return false;
+        }
+    }
+    
+    /// <summary>
+    /// Synchronizes existing organization members with Keycloak user information
+    /// </summary>
+    public async Task SyncOrganizationMembersAsync(Guid organizationId)
+    {
+        try
+        {
+            var members = await _organizationMemberRepository.GetOrganizationMembersAsync(organizationId);
+            // Update members with missing info or where UserName looks like a UserId (UUID pattern)
+            var uuidPattern = @"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
+            var membersToUpdate = members.Where(m => 
+                string.IsNullOrEmpty(m.UserName) || 
+                string.IsNullOrEmpty(m.UserEmail) ||
+                (m.UserName == m.UserId) ||
+                System.Text.RegularExpressions.Regex.IsMatch(m.UserName ?? "", uuidPattern)
+            ).ToList();
+            
+            if (!membersToUpdate.Any())
+            {
+                _logger.LogDebug("No members need synchronization for organization {OrganizationId}", organizationId);
+                return;
+            }
+
+            _logger.LogInformation("Synchronizing {Count} members for organization {OrganizationId}", membersToUpdate.Count, organizationId);
+
+            foreach (var member in membersToUpdate)
+            {
+                try
+                {
+                    var userInfo = await GetUserByIdAsync(member.UserId);
+                    if (userInfo != null)
+                    {
+                        member.UserName = userInfo.DisplayName ?? userInfo.Username ?? member.UserName ?? $"User-{member.UserId[..Math.Min(8, member.UserId.Length)]}";
+                        member.UserEmail = userInfo.Email ?? member.UserEmail;
+                        
+                        await _organizationMemberRepository.UpdateAsync(member);
+                        _logger.LogDebug("Updated member {UserId} in organization {OrganizationId}", member.UserId, organizationId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not sync member {UserId} in organization {OrganizationId}", member.UserId, organizationId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error synchronizing members for organization {OrganizationId}", organizationId);
         }
     }
     

@@ -897,4 +897,22 @@ public class TicketManagementApiClient
             return null;
         }
     }
+
+    public async Task<ApiResponseDto<Dictionary<string, UserDto>>?> GetUsersBatchAsync(List<string> userIds)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("api/users/batch", userIds, _jsonOptions);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<Dictionary<string, UserDto>>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 }

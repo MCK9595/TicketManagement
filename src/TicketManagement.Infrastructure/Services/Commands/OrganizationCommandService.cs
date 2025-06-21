@@ -16,6 +16,7 @@ public class OrganizationCommandService : IOrganizationCommandService
     private readonly INotificationService _notificationService;
     private readonly ICacheService _cacheService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IUserManagementService _userManagementService;
     private readonly ILogger<OrganizationCommandService> _logger;
 
     public OrganizationCommandService(
@@ -24,6 +25,7 @@ public class OrganizationCommandService : IOrganizationCommandService
         INotificationService notificationService,
         ICacheService cacheService,
         IHttpContextAccessor httpContextAccessor,
+        IUserManagementService userManagementService,
         ILogger<OrganizationCommandService> logger)
     {
         _organizationRepository = organizationRepository;
@@ -31,6 +33,7 @@ public class OrganizationCommandService : IOrganizationCommandService
         _notificationService = notificationService;
         _cacheService = cacheService;
         _httpContextAccessor = httpContextAccessor;
+        _userManagementService = userManagementService;
         _logger = logger;
     }
 
@@ -217,13 +220,35 @@ public class OrganizationCommandService : IOrganizationCommandService
         }
 
         // Create new member
+        // Get user information if not provided
+        string userName = command.UserName;
+        string userEmail = command.UserEmail;
+
+        if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(userEmail))
+        {
+            try
+            {
+                var userInfo = await _userManagementService.GetUserByIdAsync(command.UserId);
+                if (userInfo != null)
+                {
+                    userName = string.IsNullOrEmpty(userName) ? (userInfo.DisplayName ?? userInfo.Username ?? command.UserId) : userName;
+                    userEmail = string.IsNullOrEmpty(userEmail) ? (userInfo.Email ?? string.Empty) : userEmail;
+                    _logger.LogDebug("Retrieved missing user info from Keycloak for user {UserId}", command.UserId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to retrieve user info from Keycloak for user {UserId}", command.UserId);
+            }
+        }
+
         var member = new OrganizationMember
         {
             Id = Guid.NewGuid(),
             OrganizationId = command.OrganizationId,
             UserId = command.UserId,
-            UserName = command.UserName,
-            UserEmail = command.UserEmail,
+            UserName = userName,
+            UserEmail = userEmail,
             Role = command.Role,
             JoinedAt = DateTime.UtcNow,
             InvitedBy = command.InvitedBy,
@@ -352,10 +377,28 @@ public class OrganizationCommandService : IOrganizationCommandService
     {
         _logger.LogTrace("Creating admin member for organization {OrganizationId}, user {UserId}", organizationId, userId);
 
-        // Get user information from HttpContext if available
-        var httpContext = _httpContextAccessor.HttpContext;
-        var userName = httpContext?.User?.Identity?.Name ?? userId;
-        var userEmail = httpContext?.User?.Claims?.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+        // Get user information from Keycloak via UserManagementService
+        string userName = userId;
+        string userEmail = string.Empty;
+
+        try
+        {
+            var userInfo = await _userManagementService.GetUserByIdAsync(userId);
+            if (userInfo != null)
+            {
+                userName = userInfo.DisplayName ?? userInfo.Username ?? userId;
+                userEmail = userInfo.Email ?? string.Empty;
+                _logger.LogDebug("Retrieved user info from Keycloak: UserName={UserName}, Email={Email}", userName, userEmail);
+            }
+            else
+            {
+                _logger.LogWarning("Could not retrieve user info from Keycloak for user {UserId}, using fallback values", userId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve user info from Keycloak for user {UserId}, using fallback values", userId);
+        }
 
         return new OrganizationMember
         {
@@ -363,7 +406,7 @@ public class OrganizationCommandService : IOrganizationCommandService
             OrganizationId = organizationId,
             UserId = userId,
             UserName = userName,
-            UserEmail = userEmail ?? string.Empty,
+            UserEmail = userEmail,
             Role = OrganizationRole.Admin,
             JoinedAt = DateTime.UtcNow,
             InvitedBy = "system",

@@ -58,6 +58,10 @@ else if (organization != null)
                         <div class="col-sm-6">
                             <small class="text-muted">Created</small>
                             <div>@organization.CreatedAt.ToString("MMMM dd, yyyy")</div>
+                            @if (!string.IsNullOrEmpty(organization.CreatedByName))
+                            {
+                                <small class="text-muted">by @organization.CreatedByName</small>
+                            }
                         </div>
                         <div class="col-sm-6">
                             <small class="text-muted">Status</small>

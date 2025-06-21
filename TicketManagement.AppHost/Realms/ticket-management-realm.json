@@ -8,6 +8,7 @@
   "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
   "bruteForceProtected": true,
+  "defaultSignatureAlgorithm": "RS256",
   "permanentLockout": false,
   "maxFailureWaitSeconds": 900,
   "minimumQuickLoginWaitSeconds": 60,
@@ -74,7 +75,11 @@
       "enabled": true,
       "emailVerified": false,
       "serviceAccountClientId": "ticket-management-service",
-      "realmRoles": ["admin"]
+      "realmRoles": ["admin"],
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users", "create-client", "manage-clients", "query-users", "manage-realm"],
+        "account": ["manage-account", "view-profile"]
+      }
     }
   ],
   "clients": [
@@ -555,6 +560,26 @@
   "identityProviders": [],
   "identityProviderMappers": [],
   "components": {
+    "org.keycloak.keys.KeyProvider": [
+      {
+        "name": "rsa-generated",
+        "providerId": "rsa-generated",
+        "config": {
+          "priority": ["100"],
+          "keySize": ["2048"],
+          "algorithm": ["RS256"]
+        }
+      },
+      {
+        "name": "hmac-generated",
+        "providerId": "hmac-generated",
+        "config": {
+          "priority": ["100"],
+          "secretSize": ["64"],
+          "algorithm": ["HS256"]
+        }
+      }
+    ],
     "org.keycloak.services.clientregistration.policy.ClientRegistrationPolicy": [
       {
         "name": "Allowed Protocol Mapper Types",

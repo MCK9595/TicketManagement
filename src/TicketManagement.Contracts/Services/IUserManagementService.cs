@@ -86,4 +86,9 @@ public interface IUserManagementService
     /// ユーザーが組織管理者かどうかを確認
     /// </summary>
     Task<bool> IsOrganizationAdminAsync(string userId, Guid? organizationId = null);
+
+    /// <summary>
+    /// 組織メンバーの情報をKeycloakと同期
+    /// </summary>
+    Task SyncOrganizationMembersAsync(Guid organizationId);
 }

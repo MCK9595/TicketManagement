@@ -17,6 +17,7 @@ public class OrganizationsControllerTests
 {
     private Mock<IOrganizationService> _organizationServiceMock;
     private Mock<IProjectService> _projectServiceMock;
+    private Mock<IUserManagementService> _userManagementServiceMock;
     private Mock<ILogger<OrganizationsController>> _loggerMock;
     private OrganizationsController _controller;
     private ClaimsPrincipal _user;
@@ -26,6 +27,7 @@ public class OrganizationsControllerTests
     {
         _organizationServiceMock = new Mock<IOrganizationService>();
         _projectServiceMock = new Mock<IProjectService>();
+        _userManagementServiceMock = new Mock<IUserManagementService>();
         _loggerMock = new Mock<ILogger<OrganizationsController>>();
 
         _user = new ClaimsPrincipal(new ClaimsIdentity(new[]
@@ -38,6 +40,7 @@ public class OrganizationsControllerTests
         _controller = new OrganizationsController(
             _organizationServiceMock.Object,
             _projectServiceMock.Object,
+            _userManagementServiceMock.Object,
             _loggerMock.Object)
         {
             ControllerContext = new ControllerContext

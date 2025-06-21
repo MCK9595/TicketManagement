@@ -15,15 +15,18 @@ public class OrganizationsController : ControllerBase
 {
     private readonly IOrganizationService _organizationService;
     private readonly IProjectService _projectService;
+    private readonly IUserManagementService _userManagementService;
     private readonly ILogger<OrganizationsController> _logger;
 
     public OrganizationsController(
         IOrganizationService organizationService, 
         IProjectService projectService,
+        IUserManagementService userManagementService,
         ILogger<OrganizationsController> logger)
     {
         _organizationService = organizationService;
         _projectService = projectService;
+        _userManagementService = userManagementService;
         _logger = logger;
     }
 
@@ -38,6 +41,50 @@ public class OrganizationsController : ControllerBase
         }
         
         return userId;
+    }
+
+    /// <summary>
+    /// ユーザーIDを表示名に解決
+    /// </summary>
+    private async Task<string?> ResolveUserDisplayNameAsync(string? userId)
+    {
+        if (string.IsNullOrEmpty(userId))
+            return null;
+
+        try
+        {
+            var user = await _userManagementService.GetUserByIdAsync(userId);
+            return user?.DisplayName ?? user?.Username ?? $"User-{userId[..Math.Min(8, userId.Length)]}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to resolve display name for user {UserId}", userId);
+            return $"User-{userId[..Math.Min(8, userId.Length)]}";
+        }
+    }
+
+    /// <summary>
+    /// 複数のユーザーIDを一括で表示名に解決
+    /// </summary>
+    private async Task<Dictionary<string, string?>> ResolveUserDisplayNamesAsync(IEnumerable<string> userIds)
+    {
+        var uniqueUserIds = userIds.Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
+        if (!uniqueUserIds.Any())
+            return new Dictionary<string, string?>();
+
+        try
+        {
+            var users = await _userManagementService.GetUsersByIdsAsync(uniqueUserIds);
+            return users.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value?.DisplayName ?? kvp.Value?.Username ?? $"User-{kvp.Key[..Math.Min(8, kvp.Key.Length)]}"
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to resolve display names for users");
+            return uniqueUserIds.ToDictionary(id => id, id => $"User-{id[..Math.Min(8, id.Length)]}");
+        }
     }
 
     /// <summary>
@@ -91,6 +138,15 @@ public class OrganizationsController : ControllerBase
             var userId = GetCurrentUserId();
             var organizations = await _organizationService.GetUserOrganizationsAsync(userId);
             
+            // Collect all unique user IDs for batch resolution
+            var allUserIds = organizations
+                .SelectMany(org => new[] { org.CreatedBy, org.UpdatedBy })
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Distinct()
+                .ToList();
+            
+            var userDisplayNames = await ResolveUserDisplayNamesAsync(allUserIds);
+            
             var orgDtos = new List<OrganizationDto>();
             foreach (var org in organizations)
             {
@@ -105,8 +161,10 @@ public class OrganizationsController : ControllerBase
                     Description = org.Description,
                     CreatedAt = org.CreatedAt,
                     CreatedBy = org.CreatedBy,
+                    CreatedByName = !string.IsNullOrEmpty(org.CreatedBy) ? userDisplayNames.GetValueOrDefault(org.CreatedBy) : null,
                     UpdatedAt = org.UpdatedAt,
                     UpdatedBy = org.UpdatedBy,
+                    UpdatedByName = !string.IsNullOrEmpty(org.UpdatedBy) ? userDisplayNames.GetValueOrDefault(org.UpdatedBy) : null,
                     IsActive = org.IsActive,
                     MaxProjects = maxProjects,
                     MaxMembers = maxMembers,
@@ -148,6 +206,13 @@ public class OrganizationsController : ControllerBase
             var (currentProjects, maxProjects) = await _organizationService.GetProjectLimitsAsync(id);
             var (currentMembers, maxMembers) = await _organizationService.GetMemberLimitsAsync(id);
             
+            // Resolve user display names for creator and updater
+            var userIds = new List<string>();
+            if (!string.IsNullOrEmpty(organization.CreatedBy)) userIds.Add(organization.CreatedBy);
+            if (!string.IsNullOrEmpty(organization.UpdatedBy)) userIds.Add(organization.UpdatedBy);
+            
+            var userDisplayNames = await ResolveUserDisplayNamesAsync(userIds);
+            
             var orgDto = new OrganizationDto
             {
                 Id = organization.Id,
@@ -156,8 +221,10 @@ public class OrganizationsController : ControllerBase
                 Description = organization.Description,
                 CreatedAt = organization.CreatedAt,
                 CreatedBy = organization.CreatedBy,
+                CreatedByName = !string.IsNullOrEmpty(organization.CreatedBy) ? userDisplayNames.GetValueOrDefault(organization.CreatedBy) : null,
                 UpdatedAt = organization.UpdatedAt,
                 UpdatedBy = organization.UpdatedBy,
+                UpdatedByName = !string.IsNullOrEmpty(organization.UpdatedBy) ? userDisplayNames.GetValueOrDefault(organization.UpdatedBy) : null,
                 IsActive = organization.IsActive,
                 MaxProjects = maxProjects,
                 MaxMembers = maxMembers,
@@ -355,13 +422,28 @@ public class OrganizationsController : ControllerBase
                 return Forbid();
             }
 
+            // Synchronize member information with Keycloak before returning
+            try
+            {
+                await _userManagementService.SyncOrganizationMembersAsync(id);
+            }
+            catch (Exception syncEx)
+            {
+                _logger.LogWarning(syncEx, "Failed to synchronize members for organization {OrganizationId}, continuing with existing data", id);
+            }
+
             var members = await _organizationService.GetOrganizationMembersAsync(id);
+            
+            // Collect all user IDs to resolve display names
+            var userIds = members.Select(m => m.UserId).Where(uid => !string.IsNullOrEmpty(uid)).Distinct().ToList();
+            var userDisplayNames = await ResolveUserDisplayNamesAsync(userIds);
+            
             var memberDtos = members.Select(m => new OrganizationMemberDto
             {
                 Id = m.Id,
                 OrganizationId = m.OrganizationId,
                 UserId = m.UserId,
-                UserName = m.UserName,
+                UserName = !string.IsNullOrEmpty(m.UserName) ? m.UserName : userDisplayNames.GetValueOrDefault(m.UserId) ?? m.UserId,
                 UserEmail = m.UserEmail,
                 Role = m.Role,
                 JoinedAt = m.JoinedAt,
@@ -376,6 +458,39 @@ public class OrganizationsController : ControllerBase
         {
             _logger.LogError(ex, "Error getting organization members for {OrganizationId}", id);
             return StatusCode(500, ApiResponseDto<List<OrganizationMemberDto>>.ErrorResult("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// 組織メンバーの情報をKeycloakと同期
+    /// </summary>
+    [HttpPost("{id:guid}/members/sync")]
+    public async Task<ActionResult<ApiResponseDto<string>>> SyncOrganizationMembers(Guid id)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            
+            if (!await _organizationService.CanUserAccessOrganizationAsync(id, userId))
+            {
+                return Forbid();
+            }
+
+            // Check if user can manage members in the organization
+            var canManageMembers = await _organizationService.CanUserManageMembersAsync(id, userId);
+            if (!canManageMembers)
+            {
+                return Forbid("Only organization administrators can sync member information");
+            }
+
+            await _userManagementService.SyncOrganizationMembersAsync(id);
+
+            return ApiResponseDto<string>.SuccessResult("Member synchronization completed successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error synchronizing organization members for {OrganizationId}", id);
+            return StatusCode(500, ApiResponseDto<string>.ErrorResult("Failed to synchronize member information"));
         }
     }
 

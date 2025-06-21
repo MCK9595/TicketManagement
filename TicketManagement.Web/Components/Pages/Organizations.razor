@@ -43,6 +43,10 @@ else if (organizations?.Any() == true)
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <small class="text-muted">
                                 Created @organization.CreatedAt.ToString("MMM dd, yyyy")
+                                @if (!string.IsNullOrEmpty(organization.CreatedByName))
+                                {
+                                    <span> by @organization.CreatedByName</span>
+                                }
                             </small>
                             <span class="badge bg-@(organization.IsActive ? "success" : "secondary")">
                                 @(organization.IsActive ? "Active" : "Inactive")
