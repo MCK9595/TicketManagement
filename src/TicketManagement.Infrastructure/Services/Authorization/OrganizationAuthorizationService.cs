@@ -97,6 +97,19 @@ public class OrganizationAuthorizationService : IOrganizationAuthorizationServic
         _logger.LogTrace("Checking project creation permission: {UserId} in organization {OrganizationId}", userId, organizationId);
 
         var role = await _memberRepository.GetUserRoleInOrganizationAsync(organizationId, userId);
+        
+        // Log detailed information for debugging
+        if (role == null)
+        {
+            _logger.LogWarning("Project creation check: User {UserId} is not a member of organization {OrganizationId}", 
+                userId, organizationId);
+        }
+        else
+        {
+            _logger.LogInformation("Project creation check: User {UserId} has role {Role} in organization {OrganizationId}", 
+                userId, role.Value, organizationId);
+        }
+
         var canCreate = role == OrganizationRole.Manager || role == OrganizationRole.Admin;
 
         if (!canCreate)

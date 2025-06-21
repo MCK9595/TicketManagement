@@ -1,6 +1,7 @@
 using TicketManagement.Contracts.DTOs;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Net;
 
 namespace TicketManagement.Web.Client.Services;
 
@@ -101,19 +102,16 @@ public class TicketManagementApiClient
 
     public async Task<ApiResponseDto<ProjectDto>?> CreateProjectAsync(CreateProjectDto createProject)
     {
-        try
+        return await ExecuteWithRetryAsync(async () =>
         {
             var response = await _httpClient.PostAsJsonAsync("api/projects", createProject);
             var content = await response.Content.ReadAsStringAsync();
             
             // Log response details for debugging
             Console.WriteLine($"Create project response. Status: {response.StatusCode}, Content: '{content}', Content-Type: {response.Content.Headers.ContentType}");
-            Console.WriteLine($"Response Headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(", ", h.Value)}"))}");
-            Console.WriteLine($"Content Length: {response.Content.Headers.ContentLength}");
             
             if (response.IsSuccessStatusCode)
             {
-                // Check if content is empty or not JSON
                 if (string.IsNullOrWhiteSpace(content))
                 {
                     Console.WriteLine("Response content is empty");
@@ -124,7 +122,6 @@ public class TicketManagementApiClient
                     };
                 }
                 
-                // Try to deserialize with better error handling
                 try
                 {
                     var result = JsonSerializer.Deserialize<ApiResponseDto<ProjectDto>>(content, _jsonOptions);
@@ -134,7 +131,6 @@ public class TicketManagementApiClient
                 catch (JsonException ex)
                 {
                     Console.WriteLine($"JSON deserialization failed: {ex.Message}");
-                    Console.WriteLine($"Content that failed to deserialize: {content}");
                     return new ApiResponseDto<ProjectDto> 
                     { 
                         Success = false, 
@@ -144,33 +140,80 @@ public class TicketManagementApiClient
             }
             else
             {
-                // Log the error for debugging
                 Console.WriteLine($"Create project failed. Status: {response.StatusCode}, Content: {content}");
                 
-                var errorMessage = response.StatusCode switch
+                string errorMessage;
+                try
                 {
-                    System.Net.HttpStatusCode.Unauthorized => "Your session has expired. Please refresh the page and log in again.",
-                    System.Net.HttpStatusCode.Forbidden => "You don't have permission to create projects.",
-                    System.Net.HttpStatusCode.BadRequest => "Invalid project data. Please check your input.",
-                    _ => $"Failed to create project: {response.StatusCode}"
-                };
+                    var errorResponse = JsonSerializer.Deserialize<ApiResponseDto<object>>(content, _jsonOptions);
+                    errorMessage = errorResponse?.Message ?? "Unknown error occurred";
+                }
+                catch
+                {
+                    errorMessage = response.StatusCode switch
+                    {
+                        HttpStatusCode.Unauthorized => "Your session has expired. Please refresh the page and log in again.",
+                        HttpStatusCode.Forbidden => "You don't have permission to create projects in this organization. Contact your organization administrator to get Manager or Admin role.",
+                        HttpStatusCode.BadRequest => "Invalid project data. Please check your input.",
+                        HttpStatusCode.Conflict => "A project with this name already exists in the organization.",
+                        _ => $"Failed to create project. Server error: {response.StatusCode}"
+                    };
+                }
                 
-                return new ApiResponseDto<ProjectDto> 
+                var result = new ApiResponseDto<ProjectDto> 
                 { 
                     Success = false, 
                     Message = errorMessage
                 };
+
+                // Check if we should retry
+                if (RetryHelper.ShouldRetry(response.StatusCode))
+                {
+                    throw new HttpRequestException($"HTTP {response.StatusCode}: {errorMessage}");
+                }
+
+                return result;
+            }
+        });
+    }
+
+    private async Task<T?> ExecuteWithRetryAsync<T>(Func<Task<T?>> operation, int maxRetries = 3) where T : class
+    {
+        var baseDelay = TimeSpan.FromSeconds(1);
+        
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                return await operation();
+            }
+            catch (Exception ex) when (attempt < maxRetries && RetryHelper.ShouldRetry(ex))
+            {
+                var delay = RetryHelper.CalculateDelay(attempt, baseDelay);
+                Console.WriteLine($"Attempt {attempt} failed with {ex.GetType().Name}: {ex.Message}. Retrying in {delay.TotalMilliseconds:F0}ms...");
+                await Task.Delay(delay);
+            }
+            catch (HttpRequestException ex) when (attempt < maxRetries)
+            {
+                // Parse status code from message if possible
+                var shouldRetry = ex.Message.Contains("500") || ex.Message.Contains("502") || 
+                                 ex.Message.Contains("503") || ex.Message.Contains("504");
+                
+                if (shouldRetry)
+                {
+                    var delay = RetryHelper.CalculateDelay(attempt, baseDelay);
+                    Console.WriteLine($"HTTP error on attempt {attempt}: {ex.Message}. Retrying in {delay.TotalMilliseconds:F0}ms...");
+                    await Task.Delay(delay);
+                }
+                else
+                {
+                    throw;
+                }
             }
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Exception in CreateProjectAsync: {ex.Message}");
-            return new ApiResponseDto<ProjectDto> 
-            { 
-                Success = false, 
-                Message = $"Exception: {ex.Message}"
-            };
-        }
+        
+        // If we get here, all retries failed
+        return null;
     }
 
     public async Task<ApiResponseDto<ProjectDto>?> UpdateProjectAsync(Guid projectId, UpdateProjectDto updateProject)
@@ -440,6 +483,42 @@ public class TicketManagementApiClient
             {
                 var content = await response.Content.ReadAsStringAsync();
                 return JsonSerializer.Deserialize<ApiResponseDto<ProjectMemberDto>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<ProjectMemberDto>?> UpdateProjectMemberRoleAsync(Guid projectId, string userId, UpdateProjectMemberDto updateMember)
+    {
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync($"api/projects/{projectId}/members/{userId}", updateMember);
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<ProjectMemberDto>>(content, _jsonOptions);
+            }
+            return null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ApiResponseDto<string>?> RemoveProjectMemberAsync(Guid projectId, string userId)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync($"api/projects/{projectId}/members/{userId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<ApiResponseDto<string>>(content, _jsonOptions);
             }
             return null;
         }

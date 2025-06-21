@@ -46,6 +46,9 @@ else if (project != null)
                 <button class="btn btn-primary" @onclick="ShowCreateTicketModal" @onclick:preventDefault="true">
                     <span class="bi bi-plus-circle" aria-hidden="true"></span> New Ticket
                 </button>
+                <a href="/projects/@ProjectId/members" class="btn btn-outline-primary">
+                    <span class="bi bi-people" aria-hidden="true"></span> Manage Members
+                </a>
                 <button class="btn btn-outline-danger" @onclick="ShowDeleteProjectModal" @onclick:preventDefault="true">
                     <span class="bi bi-trash" aria-hidden="true"></span> Delete Project
                 </button>

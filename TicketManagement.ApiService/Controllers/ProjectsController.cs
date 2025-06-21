@@ -28,16 +28,12 @@ public class ProjectsController : ControllerBase
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? 
                      User.FindFirst("sub")?.Value;
         
-        _logger.LogDebug("GetCurrentUserId called. UserId: {UserId}, Claims: {Claims}", 
-            userId, 
-            string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
-        
         if (string.IsNullOrEmpty(userId))
         {
             throw new UnauthorizedAccessException("User ID not found in token");
         }
         
-        return userId;
+        return userId.Trim();
     }
 
     private async Task<List<ProjectMemberDto>> MapProjectMemberDtosAsync(IEnumerable<TicketManagement.Core.Entities.ProjectMember> members)
@@ -90,20 +86,7 @@ public class ProjectsController : ControllerBase
             }
 
             _logger.LogInformation("Returning {ProjectCount} projects for user {UserId}", projectDtos.Count, userId);
-            var result = ApiResponseDto<List<ProjectDto>>.SuccessResult(projectDtos);
-            
-            // Debug: Log the serialized result
-            try
-            {
-                var json = System.Text.Json.JsonSerializer.Serialize(result);
-                _logger.LogDebug("GetProjects serialized response: {Json}", json);
-            }
-            catch (Exception serEx)
-            {
-                _logger.LogError(serEx, "Failed to serialize GetProjects response for debugging");
-            }
-
-            return result;
+            return ApiResponseDto<List<ProjectDto>>.SuccessResult(projectDtos);
         }
         catch (Exception ex)
         {
@@ -185,45 +168,52 @@ public class ProjectsController : ControllerBase
                 return BadRequest(ApiResponseDto<ProjectDto>.ErrorResult(errors));
             }
 
-            var userId = GetCurrentUserId();
-            _logger.LogInformation("Creating project for user: {UserId} in organization: {OrganizationId}", userId, dto.OrganizationId);
-            var project = await _projectService.CreateProjectAsync(dto.OrganizationId, dto.Name, dto.Description, userId);
-
-            var members = await MapProjectMemberDtosAsync(project.Members);
-            
-            var projectDto = new ProjectDto
-            {
-                Id = project.Id,
-                OrganizationId = project.OrganizationId,
-                OrganizationName = project.Organization?.Name ?? string.Empty,
-                Name = project.Name,
-                Description = project.Description,
-                CreatedAt = project.CreatedAt,
-                CreatedBy = project.CreatedBy,
-                IsActive = project.IsActive,
-                Members = members,
-                TicketCount = 0
-            };
-
-            _logger.LogInformation("Project created successfully: {ProjectId}", project.Id);
-            var result = ApiResponseDto<ProjectDto>.SuccessResult(projectDto, "Project created successfully");
-            
-            // Debug: Log the serialized result
             try
             {
-                var json = System.Text.Json.JsonSerializer.Serialize(result);
-                _logger.LogDebug("Serialized response: {Json}", json);
+                var userId = GetCurrentUserId();
+                _logger.LogInformation("Creating project for user: {UserId} in organization: {OrganizationId}", userId, dto.OrganizationId);
+                var project = await _projectService.CreateProjectAsync(dto.OrganizationId, dto.Name, dto.Description, userId);
+
+                var members = await MapProjectMemberDtosAsync(project.Members);
+                
+                var projectDto = new ProjectDto
+                {
+                    Id = project.Id,
+                    OrganizationId = project.OrganizationId,
+                    OrganizationName = project.Organization?.Name ?? string.Empty,
+                    Name = project.Name,
+                    Description = project.Description,
+                    CreatedAt = project.CreatedAt,
+                    CreatedBy = project.CreatedBy,
+                    IsActive = project.IsActive,
+                    Members = members,
+                    TicketCount = 0
+                };
+
+                _logger.LogInformation("Project created successfully: {ProjectId}", project.Id);
+                var result = ApiResponseDto<ProjectDto>.SuccessResult(projectDto, "Project created successfully");
+                
+                return Created($"api/projects/{project.Id}", result);
             }
-            catch (Exception serEx)
+            catch (UnauthorizedAccessException ex)
             {
-                _logger.LogError(serEx, "Failed to serialize response for debugging");
+                _logger.LogWarning(ex, "Permission denied for user creating project in organization {OrganizationId}", dto.OrganizationId);
+                return Forbid();
             }
-            
-            return Created($"api/projects/{project.Id}", result);
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Business rule violation creating project: {Message}", ex.Message);
+                return BadRequest(ApiResponseDto<ProjectDto>.ErrorResult(ex.Message));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error creating project: {Message}", ex.Message);
+                return StatusCode(500, ApiResponseDto<ProjectDto>.ErrorResult("An unexpected error occurred while creating the project. Please try again."));
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating project: {Message}", ex.Message);
+            _logger.LogError(ex, "Error in CreateProject method: {Message}", ex.Message);
             return StatusCode(500, ApiResponseDto<ProjectDto>.ErrorResult("Internal server error"));
         }
     }
@@ -313,7 +303,7 @@ public class ProjectsController : ControllerBase
     /// プロジェクトにメンバーを追加
     /// </summary>
     [HttpPost("{id:guid}/members")]
-    [Authorize(Policy = "ProjectManager")]
+    [Authorize]
     public async Task<ActionResult<ApiResponseDto<ProjectMemberDto>>> AddProjectMember(Guid id, [FromBody] AddProjectMemberDto dto)
     {
         try
@@ -359,7 +349,7 @@ public class ProjectsController : ControllerBase
     /// プロジェクトメンバーの権限を更新
     /// </summary>
     [HttpPut("{id:guid}/members/{userId}")]
-    [Authorize(Policy = "ProjectManager")]
+    [Authorize]
     public async Task<ActionResult<ApiResponseDto<ProjectMemberDto>>> UpdateProjectMemberRole(
         Guid id, string userId, [FromBody] UpdateProjectMemberDto dto)
     {
@@ -402,7 +392,7 @@ public class ProjectsController : ControllerBase
     /// プロジェクトからメンバーを削除
     /// </summary>
     [HttpDelete("{id:guid}/members/{userId}")]
-    [Authorize(Policy = "ProjectManager")]
+    [Authorize]
     public async Task<ActionResult<ApiResponseDto<string>>> RemoveProjectMember(Guid id, string userId)
     {
         try

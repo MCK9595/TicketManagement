@@ -2,6 +2,7 @@
 @using TicketManagement.Web.Client.Services
 @using TicketManagement.Contracts.DTOs
 @using TicketManagement.Core.Enums
+@using System.ComponentModel.DataAnnotations
 @inject TicketManagementApiClient ApiClient
 @inject NavigationManager Navigation
 @attribute [Authorize]
@@ -30,9 +31,12 @@ else if (project != null)
             </nav>
             <h1><span class="bi bi-people-fill" aria-hidden="true"></span> Project Members</h1>
         </div>
-        <button class="btn btn-primary" @onclick="ShowAddMemberModal">
-            <span class="bi bi-person-plus" aria-hidden="true"></span> Add Member
-        </button>
+        @if (canManageMembers)
+        {
+            <button class="btn btn-primary" @onclick="ShowAddMemberModal">
+                <span class="bi bi-person-plus" aria-hidden="true"></span> Add Member
+            </button>
+        }
     </div>
 
     <!-- Project Info Card -->
@@ -68,7 +72,11 @@ else if (project != null)
                                             <span class="bi bi-person-circle fs-1 text-muted"></span>
                                         </div>
                                         <div class="flex-grow-1">
-                                            <h6 class="card-title mb-1">@member.UserId</h6>
+                                            <h6 class="card-title mb-1">@(!string.IsNullOrEmpty(member.UserName) ? member.UserName : member.UserId)</h6>
+                                            @if (!string.IsNullOrEmpty(member.Email))
+                                            {
+                                                <p class="text-muted small mb-1">@member.Email</p>
+                                            }
                                             <span class="badge bg-@GetRoleColor(member.Role)">@GetRoleDisplayName(member.Role)</span>
                                         </div>
                                     </div>
@@ -80,14 +88,17 @@ else if (project != null)
                                     </div>
                                 </div>
                                 <div class="card-footer bg-transparent">
-                                    <div class="btn-group w-100">
-                                        <button class="btn btn-outline-warning btn-sm" @onclick="() => ShowEditMemberModal(member)">
-                                            <span class="bi bi-pencil" aria-hidden="true"></span> Edit Role
-                                        </button>
-                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => ShowRemoveMemberModal(member)">
-                                            <span class="bi bi-person-dash" aria-hidden="true"></span> Remove
-                                        </button>
-                                    </div>
+                                    @if (canManageMembers)
+                                    {
+                                        <div class="btn-group w-100">
+                                            <button class="btn btn-outline-warning btn-sm" @onclick="() => ShowEditMemberModal(member)">
+                                                <span class="bi bi-pencil" aria-hidden="true"></span> Edit Role
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm" @onclick="() => ShowRemoveMemberModal(member)">
+                                                <span class="bi bi-person-dash" aria-hidden="true"></span> Remove
+                                            </button>
+                                        </div>
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -99,9 +110,12 @@ else if (project != null)
                 <div class="text-center py-4">
                     <span class="bi bi-people fs-1 text-muted d-block mb-2" aria-hidden="true"></span>
                     <p class="text-muted">No members found for this project</p>
-                    <button class="btn btn-primary" @onclick="ShowAddMemberModal">
-                        <span class="bi bi-person-plus" aria-hidden="true"></span> Add First Member
-                    </button>
+                    @if (canManageMembers)
+                    {
+                        <button class="btn btn-primary" @onclick="ShowAddMemberModal">
+                            <span class="bi bi-person-plus" aria-hidden="true"></span> Add First Member
+                        </button>
+                    }
                 </div>
             }
         </div>
@@ -133,10 +147,26 @@ else
                     <ValidationSummary class="text-danger" />
 
                     <div class="mb-3">
-                        <label for="userId" class="form-label">User ID</label>
-                        <InputText id="userId" class="form-control" @bind-Value="memberForm.UserId" placeholder="Enter user ID" />
+                        <label for="userId" class="form-label">Organization Member</label>
+                        @if (organizationMembers?.Any() == true)
+                        {
+                            <InputSelect id="userId" class="form-select" @bind-Value="memberForm.UserId">
+                                <option value="">-- Select a member --</option>
+                                @foreach (var orgMember in organizationMembers.Where(om => !members?.Any(pm => pm.UserId == om.UserId) == true))
+                                {
+                                    <option value="@orgMember.UserId">@orgMember.UserName (@GetRoleDisplayName(orgMember.Role))</option>
+                                }
+                            </InputSelect>
+                            <div class="form-text">Select from organization members who are not already in this project</div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                <span class="bi bi-info-circle me-2"></span>
+                                Loading organization members...
+                            </div>
+                        }
                         <ValidationMessage For="@(() => memberForm.UserId)" />
-                        <div class="form-text">Enter the Keycloak user ID or email</div>
                     </div>
 
                     <div class="mb-3">
@@ -148,6 +178,14 @@ else
                         </InputSelect>
                         <ValidationMessage For="@(() => memberForm.Role)" />
                     </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger">
+                            <span class="bi bi-exclamation-triangle me-2"></span>
+                            @errorMessage
+                        </div>
+                    }
 
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" @onclick="HideAddMemberModal">Cancel</button>
@@ -182,7 +220,13 @@ else
 
                         <div class="mb-3">
                             <label class="form-label">User</label>
-                            <div class="form-control-plaintext">@selectedMember.UserId</div>
+                            <div class="form-control-plaintext">
+                                @(!string.IsNullOrEmpty(selectedMember.UserName) ? selectedMember.UserName : selectedMember.UserId)
+                                @if (!string.IsNullOrEmpty(selectedMember.Email))
+                                {
+                                    <small class="text-muted d-block">@selectedMember.Email</small>
+                                }
+                            </div>
                         </div>
 
                         <div class="mb-3">
@@ -194,6 +238,14 @@ else
                             </InputSelect>
                             <ValidationMessage For="@(() => editMemberForm.Role)" />
                         </div>
+
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                <span class="bi bi-exclamation-triangle me-2"></span>
+                                @errorMessage
+                            </div>
+                        }
 
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" @onclick="HideEditMemberModal">Cancel</button>
@@ -223,13 +275,24 @@ else
             <div class="modal-body">
                 @if (selectedMember != null)
                 {
-                    <p>Are you sure you want to remove <strong>@selectedMember.UserId</strong> from this project?</p>
+                    <p>Are you sure you want to remove <strong>@(!string.IsNullOrEmpty(selectedMember.UserName) ? selectedMember.UserName : selectedMember.UserId)</strong> from this project?</p>
+                    @if (!string.IsNullOrEmpty(selectedMember.Email))
+                    {
+                        <p class="text-muted small">@selectedMember.Email</p>
+                    }
                     <div class="alert alert-warning">
                         <span class="bi bi-exclamation-triangle me-2"></span>
                         This action cannot be undone. The user will lose access to this project.
                     </div>
                 }
             </div>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger">
+                    <span class="bi bi-exclamation-triangle me-2"></span>
+                    @errorMessage
+                </div>
+            }
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" @onclick="HideRemoveMemberModal">Cancel</button>
                 <button type="button" class="btn btn-danger" @onclick="RemoveMember" disabled="@isRemovingMember">
@@ -254,6 +317,7 @@ else
 
     private ProjectDto? project;
     private List<ProjectMemberDto>? members;
+    private List<OrganizationMemberDto>? organizationMembers;
     private bool isLoading = true;
     private bool showAddMemberModal = false;
     private bool showEditMemberModal = false;
@@ -261,6 +325,8 @@ else
     private bool isAddingMember = false;
     private bool isUpdatingMember = false;
     private bool isRemovingMember = false;
+    private bool canManageMembers = false;
+    private string errorMessage = string.Empty;
     private AddMemberFormModel memberForm = new();
     private EditMemberFormModel editMemberForm = new();
     private ProjectMemberDto? selectedMember;
@@ -269,6 +335,8 @@ else
     {
         await LoadProject();
         await LoadMembers();
+        await LoadOrganizationMembers();
+        await CheckManagePermissions();
     }
 
     private async Task LoadProject()
@@ -307,9 +375,10 @@ else
         }
     }
 
-    private void ShowAddMemberModal()
+    private async Task ShowAddMemberModal()
     {
         memberForm = new AddMemberFormModel();
+        await LoadOrganizationMembers(); // Refresh organization members
         showAddMemberModal = true;
     }
 
@@ -317,6 +386,7 @@ else
     {
         showAddMemberModal = false;
         memberForm = new AddMemberFormModel();
+        errorMessage = string.Empty;
     }
 
     private void ShowEditMemberModal(ProjectMemberDto member)
@@ -334,6 +404,7 @@ else
         showEditMemberModal = false;
         selectedMember = null;
         editMemberForm = new EditMemberFormModel();
+        errorMessage = string.Empty;
     }
 
     private void ShowRemoveMemberModal(ProjectMemberDto member)
@@ -346,11 +417,13 @@ else
     {
         showRemoveMemberModal = false;
         selectedMember = null;
+        errorMessage = string.Empty;
     }
 
     private async Task AddMember()
     {
         isAddingMember = true;
+        errorMessage = string.Empty;
         try
         {
             var addMemberDto = new AddProjectMemberDto
@@ -364,9 +437,15 @@ else
                 HideAddMemberModal();
                 await LoadMembers();
             }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to add member. Please try again.";
+                Console.WriteLine($"Error adding member: {errorMessage}");
+            }
         }
         catch (Exception ex)
         {
+            errorMessage = "An unexpected error occurred. Please try again.";
             Console.WriteLine($"Error adding member: {ex.Message}");
         }
         finally
@@ -380,17 +459,28 @@ else
         if (selectedMember == null) return;
 
         isUpdatingMember = true;
+        errorMessage = string.Empty;
         try
         {
-            // TODO: Implement UpdateProjectMemberRoleAsync in API client
-            Console.WriteLine($"TODO: Update member role for {selectedMember.UserId} to {editMemberForm.Role}");
-            await Task.Delay(1000); // Simulate API call
-            
-            HideEditMemberModal();
-            // await LoadMembers(); // Uncomment when API is available
+            var updateDto = new UpdateProjectMemberDto
+            {
+                Role = Enum.Parse<ProjectRole>(editMemberForm.Role)
+            };
+            var response = await ApiClient.UpdateProjectMemberRoleAsync(ProjectId, selectedMember.UserId, updateDto);
+            if (response?.Success == true)
+            {
+                HideEditMemberModal();
+                await LoadMembers();
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to update member role. Please try again.";
+                Console.WriteLine($"Failed to update member role: {errorMessage}");
+            }
         }
         catch (Exception ex)
         {
+            errorMessage = "An unexpected error occurred. Please try again.";
             Console.WriteLine($"Error updating member role: {ex.Message}");
         }
         finally
@@ -404,17 +494,24 @@ else
         if (selectedMember == null) return;
 
         isRemovingMember = true;
+        errorMessage = string.Empty;
         try
         {
-            // TODO: Implement RemoveProjectMemberAsync in API client
-            Console.WriteLine($"TODO: Remove member {selectedMember.UserId} from project");
-            await Task.Delay(1000); // Simulate API call
-            
-            HideRemoveMemberModal();
-            // await LoadMembers(); // Uncomment when API is available
+            var response = await ApiClient.RemoveProjectMemberAsync(ProjectId, selectedMember.UserId);
+            if (response?.Success == true)
+            {
+                HideRemoveMemberModal();
+                await LoadMembers();
+            }
+            else
+            {
+                errorMessage = response?.Message ?? "Failed to remove member. Please try again.";
+                Console.WriteLine($"Failed to remove member: {errorMessage}");
+            }
         }
         catch (Exception ex)
         {
+            errorMessage = "An unexpected error occurred. Please try again.";
             Console.WriteLine($"Error removing member: {ex.Message}");
         }
         finally
@@ -443,6 +540,64 @@ else
             ProjectRole.Viewer => "Viewer",
             _ => role.ToString()
         };
+    }
+
+    private string GetRoleDisplayName(OrganizationRole role)
+    {
+        return role switch
+        {
+            OrganizationRole.Admin => "Organization Admin",
+            OrganizationRole.Manager => "Organization Manager",
+            OrganizationRole.Member => "Organization Member",
+            _ => role.ToString()
+        };
+    }
+
+    private async Task LoadOrganizationMembers()
+    {
+        if (project?.OrganizationId == null) return;
+
+        try
+        {
+            var response = await ApiClient.GetOrganizationMembersAsync(project.OrganizationId);
+            if (response?.Success == true && response.Data != null)
+            {
+                organizationMembers = response.Data.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading organization members: {ex.Message}");
+        }
+    }
+
+    private async Task CheckManagePermissions()
+    {
+        if (project == null) return;
+
+        try
+        {
+            // Check if user is organization admin/manager or project admin
+            var userDetailsResponse = await ApiClient.GetCurrentUserDetailsAsync();
+            if (userDetailsResponse?.Success == true && userDetailsResponse.Data != null)
+            {
+                var userDetails = userDetailsResponse.Data;
+                
+                // Check if user is project admin
+                var isProjectAdmin = members?.Any(m => m.UserId == userDetails.Id && m.Role == ProjectRole.Admin) == true;
+                
+                // Check if user is organization admin/manager
+                var userOrgMembership = userDetails.Organizations?.FirstOrDefault(o => o.OrganizationId == project.OrganizationId);
+                var isOrgAdminOrManager = userOrgMembership?.Role == OrganizationRole.Admin || userOrgMembership?.Role == OrganizationRole.Manager;
+                
+                canManageMembers = isProjectAdmin || isOrgAdminOrManager;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking manage permissions: {ex.Message}");
+            canManageMembers = false;
+        }
     }
 
     private class AddMemberFormModel

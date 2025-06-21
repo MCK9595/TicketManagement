@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Moq;
 using NUnit.Framework;
 using TicketManagement.Core.Entities;
 using TicketManagement.Core.Enums;
@@ -21,7 +23,8 @@ public class ProjectRepositoryTests
             .Options;
 
         _context = new TicketDbContext(options);
-        _repository = new ProjectRepository(_context);
+        var mockLogger = new Mock<ILogger<ProjectRepository>>();
+        _repository = new ProjectRepository(_context, mockLogger.Object);
     }
 
     [TearDown]

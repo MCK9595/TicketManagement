@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using TicketManagement.Contracts.Repositories;
 using TicketManagement.Core.Entities;
 using TicketManagement.Core.Enums;
@@ -9,10 +10,12 @@ namespace TicketManagement.Infrastructure.Repositories;
 public class OrganizationMemberRepository : Repository<OrganizationMember, Guid>, IOrganizationMemberRepository
 {
     private readonly TicketDbContext _context;
+    private readonly ILogger<OrganizationMemberRepository> _logger;
 
-    public OrganizationMemberRepository(TicketDbContext context) : base(context)
+    public OrganizationMemberRepository(TicketDbContext context, ILogger<OrganizationMemberRepository> logger) : base(context)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<OrganizationMember?> GetMemberAsync(Guid organizationId, string userId)
@@ -63,6 +66,31 @@ public class OrganizationMemberRepository : Repository<OrganizationMember, Guid>
             .FirstOrDefaultAsync(om => om.OrganizationId == organizationId && 
                                       om.UserId == userId && 
                                       om.IsActive);
+        
+        if (member == null)
+        {
+            // Additional debugging: check if user exists but is inactive
+            var inactiveMember = await _context.OrganizationMembers
+                .FirstOrDefaultAsync(om => om.OrganizationId == organizationId && om.UserId == userId);
+            
+            if (inactiveMember != null)
+            {
+                _logger.LogWarning("User {UserId} exists in organization {OrganizationId} but is inactive", 
+                    userId, organizationId);
+            }
+            else
+            {
+                // Check all members for debugging
+                var allMembers = await _context.OrganizationMembers
+                    .Where(om => om.OrganizationId == organizationId)
+                    .Select(om => new { om.UserId, om.IsActive, om.Role })
+                    .ToListAsync();
+                
+                _logger.LogWarning("User {UserId} not found in organization {OrganizationId}. Total members: {Count}. Members: {Members}", 
+                    userId, organizationId, allMembers.Count, 
+                    string.Join(", ", allMembers.Select(m => $"{m.UserId}(Active:{m.IsActive},Role:{m.Role})")));
+            }
+        }
         
         return member?.Role;
     }

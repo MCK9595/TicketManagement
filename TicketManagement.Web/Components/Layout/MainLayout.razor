@@ -2,7 +2,6 @@
 @using TicketManagement.Contracts.DTOs
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Authentication
-@using TicketManagement.Web.Components.Shared
 @inherits LayoutComponentBase
 @inject NotificationHubService? NotificationHub
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -22,10 +21,7 @@
         <div class="top-row px-4">
             <AuthorizeView>
                 <Authorized>
-                    <div class="d-flex align-items-center justify-content-between w-100">
-                        <div class="d-flex align-items-center gap-3">
-                            <OrganizationSelector OnOrganizationChanged="OnOrganizationChanged" />
-                        </div>
+                    <div class="d-flex align-items-center justify-content-end w-100">
                         <div class="d-flex align-items-center gap-3">
                             <div class="notification-indicator position-relative">
                                 <a href="/notifications" class="text-decoration-none">
@@ -81,7 +77,6 @@
     private bool showToast = false;
     private NotificationDto? latestNotification;
     private Timer? toastTimer;
-    private UserOrganizationDto? selectedOrganization;
 
     protected override async Task OnInitializedAsync()
     {
@@ -200,15 +195,6 @@
             TicketManagement.Core.Enums.NotificationType.MentionedInComment => "You Were Mentioned",
             _ => "Notification"
         };
-    }
-
-    private async Task OnOrganizationChanged(UserOrganizationDto organization)
-    {
-        selectedOrganization = organization;
-        // You could store the selected organization in a service or state management system
-        // For now, just log the change
-        Console.WriteLine($"Organization changed to: {organization.OrganizationDisplayName}");
-        StateHasChanged();
     }
 
     private string GetUserDisplayName(System.Security.Claims.ClaimsPrincipal user)

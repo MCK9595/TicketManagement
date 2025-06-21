@@ -285,11 +285,8 @@ public class ProjectServiceTests
         _mockProjectRepository.Setup(r => r.IsUserMemberOfProjectAsync(projectId, userId))
             .ReturnsAsync(false);
 
-        _mockProjectRepository.Setup(r => r.GetProjectWithMembersAsync(projectId))
-            .ReturnsAsync(project);
-
-        _mockProjectRepository.Setup(r => r.UpdateAsync(It.IsAny<Project>()))
-            .ReturnsAsync(project);
+        _mockProjectRepository.Setup(r => r.AddProjectMemberAsync(It.IsAny<ProjectMember>()))
+            .ReturnsAsync((ProjectMember m) => m);
 
         // Act
         var result = await _service.AddMemberAsync(projectId, userId, role, addedBy);
@@ -299,7 +296,7 @@ public class ProjectServiceTests
         Assert.That(result.UserId, Is.EqualTo(userId));
         Assert.That(result.Role, Is.EqualTo(role));
 
-        _mockProjectRepository.Verify(r => r.UpdateAsync(It.IsAny<Project>()), Times.Once);
+        _mockProjectRepository.Verify(r => r.AddProjectMemberAsync(It.IsAny<ProjectMember>()), Times.Once);
     }
 
     [Test]
@@ -347,35 +344,28 @@ public class ProjectServiceTests
         var userId = "member-to-remove";
         var removedBy = "admin";
 
-        var member = new ProjectMember
-        {
-            Id = Guid.NewGuid(),
-            ProjectId = projectId,
-            UserId = userId,
-            Role = ProjectRole.Member,
-            JoinedAt = DateTime.UtcNow
-        };
-
         var project = new Project
         {
             Id = projectId,
             Name = "Test Project",
             CreatedBy = "creator",
-            CreatedAt = DateTime.UtcNow,
-            Members = new List<ProjectMember> { member }
+            CreatedAt = DateTime.UtcNow
         };
 
-        _mockProjectRepository.Setup(r => r.GetProjectWithMembersAsync(projectId))
+        _mockProjectRepository.Setup(r => r.GetByIdAsync(projectId))
             .ReturnsAsync(project);
 
-        _mockProjectRepository.Setup(r => r.UpdateAsync(It.IsAny<Project>()))
-            .ReturnsAsync(project);
+        _mockProjectRepository.Setup(r => r.IsUserMemberOfProjectAsync(projectId, userId))
+            .ReturnsAsync(true);
+
+        _mockProjectRepository.Setup(r => r.RemoveProjectMemberAsync(projectId, userId))
+            .Returns(Task.CompletedTask);
 
         // Act
         await _service.RemoveMemberAsync(projectId, userId, removedBy);
 
         // Assert
-        _mockProjectRepository.Verify(r => r.UpdateAsync(It.IsAny<Project>()), Times.Once);
+        _mockProjectRepository.Verify(r => r.RemoveProjectMemberAsync(projectId, userId), Times.Once);
     }
 
     [Test]
@@ -391,12 +381,14 @@ public class ProjectServiceTests
             Id = projectId,
             Name = "Test Project",
             CreatedBy = "creator",
-            CreatedAt = DateTime.UtcNow,
-            Members = new List<ProjectMember>() // Empty members list
+            CreatedAt = DateTime.UtcNow
         };
 
-        _mockProjectRepository.Setup(r => r.GetProjectWithMembersAsync(projectId))
+        _mockProjectRepository.Setup(r => r.GetByIdAsync(projectId))
             .ReturnsAsync(project);
+
+        _mockProjectRepository.Setup(r => r.IsUserMemberOfProjectAsync(projectId, userId))
+            .ReturnsAsync(false);
 
         // Act & Assert
         Assert.ThrowsAsync<ArgumentException>(() => 

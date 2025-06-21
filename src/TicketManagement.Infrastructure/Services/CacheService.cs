@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace TicketManagement.Infrastructure.Services;
@@ -20,12 +21,16 @@ public interface ICacheService
 public class CacheService : ICacheService
 {
     private readonly IDistributedCache _distributedCache;
+    private readonly ILogger<CacheService> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
-    private volatile bool _isRedisAvailable = true;
+    private volatile bool _isCacheAvailable = true;
+    private DateTime _lastFailureTime = DateTime.MinValue;
+    private readonly TimeSpan _retryInterval = TimeSpan.FromMinutes(5); // Retry after 5 minutes
 
-    public CacheService(IDistributedCache distributedCache)
+    public CacheService(IDistributedCache distributedCache, ILogger<CacheService> logger)
     {
         _distributedCache = distributedCache;
+        _logger = logger;
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -33,10 +38,33 @@ public class CacheService : ICacheService
         };
     }
 
+    private bool ShouldRetryCache()
+    {
+        if (_isCacheAvailable) return true;
+        
+        if (DateTime.UtcNow - _lastFailureTime > _retryInterval)
+        {
+            _isCacheAvailable = true;
+            _logger.LogInformation("Retrying cache operations after failure interval");
+            return true;
+        }
+        
+        return false;
+    }
+
+    private void HandleCacheFailure(Exception ex, string operation)
+    {
+        _isCacheAvailable = false;
+        _lastFailureTime = DateTime.UtcNow;
+        _logger.LogWarning(ex, "Cache operation '{Operation}' failed. Cache disabled for {RetryInterval} minutes", 
+            operation, _retryInterval.TotalMinutes);
+    }
+
     public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
     {
-        if (!_isRedisAvailable)
+        if (!ShouldRetryCache())
         {
+            _logger.LogTrace("Cache unavailable, returning default for key: {Key}", key);
             return default;
         }
 
@@ -45,23 +73,26 @@ public class CacheService : ICacheService
             var value = await _distributedCache.GetStringAsync(key, cancellationToken);
             if (string.IsNullOrEmpty(value))
             {
+                _logger.LogTrace("Cache miss for key: {Key}", key);
                 return default;
             }
 
-            return JsonSerializer.Deserialize<T>(value, _jsonOptions);
+            var result = JsonSerializer.Deserialize<T>(value, _jsonOptions);
+            _logger.LogTrace("Cache hit for key: {Key}", key);
+            return result;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Mark Redis as unavailable and return default
-            _isRedisAvailable = false;
+            HandleCacheFailure(ex, "GetAsync");
             return default;
         }
     }
 
     public async Task SetAsync<T>(string key, T value, TimeSpan? expiration = null, CancellationToken cancellationToken = default)
     {
-        if (!_isRedisAvailable)
+        if (!ShouldRetryCache())
         {
+            _logger.LogTrace("Cache unavailable, skipping set for key: {Key}", key);
             return;
         }
 
@@ -81,29 +112,30 @@ public class CacheService : ICacheService
             }
 
             await _distributedCache.SetStringAsync(key, serializedValue, options, cancellationToken);
+            _logger.LogTrace("Cache set for key: {Key}, expiration: {Expiration}", key, expiration ?? TimeSpan.FromMinutes(30));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Mark Redis as unavailable
-            _isRedisAvailable = false;
+            HandleCacheFailure(ex, "SetAsync");
         }
     }
 
     public async Task RemoveAsync(string key, CancellationToken cancellationToken = default)
     {
-        if (!_isRedisAvailable)
+        if (!ShouldRetryCache())
         {
+            _logger.LogTrace("Cache unavailable, skipping remove for key: {Key}", key);
             return;
         }
 
         try
         {
             await _distributedCache.RemoveAsync(key, cancellationToken);
+            _logger.LogTrace("Cache removed for key: {Key}", key);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Mark Redis as unavailable
-            _isRedisAvailable = false;
+            HandleCacheFailure(ex, "RemoveAsync");
         }
     }
 

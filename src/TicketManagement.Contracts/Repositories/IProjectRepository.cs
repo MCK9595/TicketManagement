@@ -11,4 +11,7 @@ public interface IProjectRepository : IRepository<Project, Guid>
     Task<Project?> GetProjectWithTicketsAsync(Guid projectId);
     Task<bool> IsUserMemberOfProjectAsync(Guid projectId, string userId);
     Task<IEnumerable<ProjectMember>> GetProjectMembersAsync(Guid projectId);
+    Task<ProjectMember> AddProjectMemberAsync(ProjectMember member);
+    Task<ProjectMember> UpdateProjectMemberAsync(ProjectMember member);
+    Task RemoveProjectMemberAsync(Guid projectId, string userId);
 }

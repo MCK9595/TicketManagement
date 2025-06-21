@@ -56,11 +56,13 @@ public class ProjectService : IProjectService
         };
 
         // 作成者を管理者として追加（プロジェクト作成と同時に）
+        // ユーザーIDを正規化して一貫性を確保
+        var normalizedCreatedBy = createdBy?.Trim();
         var adminMember = new ProjectMember
         {
             Id = Guid.NewGuid(),
             ProjectId = project.Id,
-            UserId = createdBy,
+            UserId = normalizedCreatedBy,
             Role = ProjectRole.Admin,
             JoinedAt = DateTime.UtcNow
         };
@@ -124,14 +126,10 @@ public class ProjectService : IProjectService
         
         if (cachedProjects != null)
         {
-            _logger.LogDebug("Returning cached projects for user {UserId}: {ProjectCount} projects", userId, cachedProjects.Count());
             return cachedProjects;
         }
 
-        _logger.LogDebug("Cache miss for user {UserId}, querying database", userId);
         var projects = await _projectRepository.GetProjectsByUserIdAsync(userId);
-        _logger.LogInformation("Retrieved {ProjectCount} projects from database for user {UserId}", projects.Count(), userId);
-        
         await _cacheService.SetAsync(cacheKey, projects, TimeSpan.FromMinutes(15));
 
         return projects;
@@ -160,6 +158,13 @@ public class ProjectService : IProjectService
 
     public async Task<ProjectMember> AddMemberAsync(Guid projectId, string userId, ProjectRole role, string addedBy)
     {
+        // プロジェクトが存在するかチェック
+        var project = await _projectRepository.GetByIdAsync(projectId);
+        if (project == null)
+        {
+            throw new ArgumentException($"Project with ID {projectId} not found.", nameof(projectId));
+        }
+
         // 既にメンバーかチェック
         var isAlreadyMember = await _projectRepository.IsUserMemberOfProjectAsync(projectId, userId);
         if (isAlreadyMember)
@@ -176,18 +181,8 @@ public class ProjectService : IProjectService
             JoinedAt = DateTime.UtcNow
         };
 
-        // ProjectMemberを直接追加する方法が必要なので、
-        // 実際にはDbContextを通じて追加する必要があります
-        // ここでは簡易実装として、ProjectRepositoryに追加メソッドが必要です
-        
-        var project = await _projectRepository.GetProjectWithMembersAsync(projectId);
-        if (project == null)
-        {
-            throw new ArgumentException($"Project with ID {projectId} not found.", nameof(projectId));
-        }
-
-        project.Members.Add(member);
-        await _projectRepository.UpdateAsync(project);
+        // 直接ProjectMemberを追加
+        var addedMember = await _projectRepository.AddProjectMemberAsync(member);
 
         // 新メンバーに通知
         await _notificationService.CreateNotificationAsync(
@@ -196,7 +191,11 @@ public class ProjectService : IProjectService
             $"You have been added to project '{project.Name}' as {role}",
             NotificationType.TicketAssigned); // 適切な通知タイプが必要
 
-        return member;
+        // キャッシュを無効化
+        await _cacheService.RemoveAsync(CacheKeys.UserProjects(userId));
+        await _cacheService.RemoveAsync(CacheKeys.Project(projectId));
+
+        return addedMember;
     }
 
     public async Task<ProjectMember> UpdateMemberRoleAsync(Guid projectId, string userId, ProjectRole newRole, string updatedBy)
@@ -211,35 +210,44 @@ public class ProjectService : IProjectService
 
         member.Role = newRole;
 
-        var project = await _projectRepository.GetProjectWithMembersAsync(projectId);
-        await _projectRepository.UpdateAsync(project);
+        // 直接ProjectMemberを更新
+        var updatedMember = await _projectRepository.UpdateProjectMemberAsync(member);
+
+        // プロジェクト名を取得
+        var project = await _projectRepository.GetByIdAsync(projectId);
 
         // メンバーに通知
         await _notificationService.CreateNotificationAsync(
             userId,
             "Role Updated",
-            $"Your role in project '{project.Name}' has been updated to {newRole}",
+            $"Your role in project '{project?.Name}' has been updated to {newRole}",
             NotificationType.TicketAssigned);
 
-        return member;
+        // キャッシュを無効化
+        await _cacheService.RemoveAsync(CacheKeys.UserProjects(userId));
+        await _cacheService.RemoveAsync(CacheKeys.Project(projectId));
+
+        return updatedMember;
     }
 
     public async Task RemoveMemberAsync(Guid projectId, string userId, string removedBy)
     {
-        var project = await _projectRepository.GetProjectWithMembersAsync(projectId);
+        // プロジェクトが存在するかチェック
+        var project = await _projectRepository.GetByIdAsync(projectId);
         if (project == null)
         {
             throw new ArgumentException($"Project with ID {projectId} not found.", nameof(projectId));
         }
 
-        var member = project.Members.FirstOrDefault(m => m.UserId == userId);
-        if (member == null)
+        // メンバーが存在するかチェック
+        var isUserMember = await _projectRepository.IsUserMemberOfProjectAsync(projectId, userId);
+        if (!isUserMember)
         {
             throw new ArgumentException($"User {userId} is not a member of project {projectId}");
         }
 
-        project.Members.Remove(member);
-        await _projectRepository.UpdateAsync(project);
+        // 直接ProjectMemberを削除
+        await _projectRepository.RemoveProjectMemberAsync(projectId, userId);
 
         // 削除されたメンバーに通知
         await _notificationService.CreateNotificationAsync(
@@ -247,6 +255,10 @@ public class ProjectService : IProjectService
             "Removed from Project",
             $"You have been removed from project '{project.Name}'",
             NotificationType.TicketAssigned);
+
+        // キャッシュを無効化
+        await _cacheService.RemoveAsync(CacheKeys.UserProjects(userId));
+        await _cacheService.RemoveAsync(CacheKeys.Project(projectId));
     }
 
     public async Task<IEnumerable<ProjectMember>> GetProjectMembersAsync(Guid projectId)
