@@ -115,7 +115,6 @@
             
             if (string.IsNullOrEmpty(accessToken))
             {
-                Console.WriteLine("Warning: No access token available for SignalR connection");
             }
             
             if (NotificationHub != null)
@@ -129,7 +128,6 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error starting SignalR connection: {ex.Message}");
         }
     }
 

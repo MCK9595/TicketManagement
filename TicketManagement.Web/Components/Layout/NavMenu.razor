@@ -70,6 +70,7 @@
                     <span class="bi bi-people-fill" aria-hidden="true"></span> User Management
                 </NavLink>
             </div>
+            
         }
 
         <AuthorizeView>
@@ -118,15 +119,8 @@
             var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             if (authState.User.Identity?.IsAuthenticated == true)
             {
-                var userId = authState.User.FindFirst("sub")?.Value ?? 
-                           authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                
-                if (!string.IsNullOrEmpty(userId))
-                {
-                    var response = await ApiClient.IsSystemAdminAsync(userId);
-                    isSystemAdmin = response?.Data == true;
-                    StateHasChanged();
-                }
+                isSystemAdmin = authState.User.IsInRole("system-admin");
+                StateHasChanged();
             }
         }
         catch (Exception)

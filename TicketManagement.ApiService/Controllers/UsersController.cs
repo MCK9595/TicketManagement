@@ -80,9 +80,10 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// ユーザーを検索
+    /// ユーザーを検索（システム管理者のみ）
     /// </summary>
     [HttpGet("search")]
+    [Authorize(Policy = "SystemAdmin")]
     public async Task<ActionResult<ApiResponseDto<List<UserDto>>>> SearchUsers(
         [FromQuery] string? q,
         [FromQuery] int maxResults = 20)
@@ -481,6 +482,9 @@ public class UsersController : ControllerBase
     {
         try
         {
+            _logger.LogDebug("GetSystemAdmins: User authenticated: {IsAuthenticated}", User.Identity?.IsAuthenticated);
+            _logger.LogDebug("GetSystemAdmins: User.IsInRole('system-admin'): {IsSystemAdmin}", User.IsInRole("system-admin"));
+            
             var admins = await _userManagementService.GetSystemAdminsAsync();
             return Ok(ApiResponseDto<List<SystemAdminDto>>.SuccessResult(admins.ToList()));
         }
@@ -527,6 +531,7 @@ public class UsersController : ControllerBase
             return StatusCode(500, ApiResponseDto<bool>.ErrorResult("Internal server error"));
         }
     }
+
 
     private string? GetCurrentUserId()
     {

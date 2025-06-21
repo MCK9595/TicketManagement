@@ -1,6 +1,7 @@
 using TicketManagement.Contracts.DTOs;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace TicketManagement.Web.Services;
 
@@ -8,10 +9,12 @@ public class TicketManagementApiClient
 {
     private readonly HttpClient _httpClient;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly ILogger<TicketManagementApiClient> _logger;
 
-    public TicketManagementApiClient(HttpClient httpClient)
+    public TicketManagementApiClient(HttpClient httpClient, ILogger<TicketManagementApiClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
@@ -26,17 +29,15 @@ public class TicketManagementApiClient
             var response = await _httpClient.GetAsync("api/projects");
             var content = await response.Content.ReadAsStringAsync();
             
-            // Log response details for debugging
-            Console.WriteLine($"Get projects response. Status: {response.StatusCode}, Content: '{content}', Content-Type: {response.Content.Headers.ContentType}");
-            Console.WriteLine($"Response Headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(", ", h.Value)}"))}");
-            Console.WriteLine($"Content Length: {response.Content.Headers.ContentLength}");
+            _logger.LogDebug("Get projects response. Status: {StatusCode}, Content-Type: {ContentType}", 
+                response.StatusCode, response.Content.Headers.ContentType);
             
             if (response.IsSuccessStatusCode)
             {
                 // Check if content is empty or not JSON
                 if (string.IsNullOrWhiteSpace(content))
                 {
-                    Console.WriteLine("Response content is empty");
+                    _logger.LogWarning("Response content is empty");
                     return new ApiResponseDto<List<ProjectDto>> 
                     { 
                         Success = false, 
@@ -49,13 +50,14 @@ public class TicketManagementApiClient
                 try
                 {
                     var result = JsonSerializer.Deserialize<ApiResponseDto<List<ProjectDto>>>(content, _jsonOptions);
-                    Console.WriteLine($"Deserialized result: Success={result?.Success}, Data count={result?.Data?.Count}, Message={result?.Message}");
+                    _logger.LogDebug("Deserialized result: Success={Success}, Data count={Count}", 
+                        result?.Success, result?.Data?.Count);
                     return result;
                 }
                 catch (JsonException ex)
                 {
-                    Console.WriteLine($"JSON deserialization failed: {ex.Message}");
-                    Console.WriteLine($"Content that failed to deserialize: {content}");
+                    _logger.LogError(ex, "JSON deserialization failed");
+                    _logger.LogDebug("Content that failed to deserialize: {Content}", content);
                     return new ApiResponseDto<List<ProjectDto>> 
                     { 
                         Success = false, 
@@ -66,7 +68,7 @@ public class TicketManagementApiClient
             }
             else
             {
-                Console.WriteLine($"Get projects failed. Status: {response.StatusCode}, Content: {content}");
+                _logger.LogError("Get projects failed. Status: {StatusCode}", response.StatusCode);
                 return new ApiResponseDto<List<ProjectDto>> 
                 { 
                     Success = false, 
@@ -77,7 +79,7 @@ public class TicketManagementApiClient
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Exception in GetProjectsAsync: {ex.Message}");
+            _logger.LogError(ex, "Exception in GetProjectsAsync");
             return new ApiResponseDto<List<ProjectDto>> 
             { 
                 Success = false, 
@@ -107,16 +109,14 @@ public class TicketManagementApiClient
             var content = await response.Content.ReadAsStringAsync();
             
             // Log response details for debugging
-            Console.WriteLine($"Create project response. Status: {response.StatusCode}, Content: '{content}', Content-Type: {response.Content.Headers.ContentType}");
-            Console.WriteLine($"Response Headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(", ", h.Value)}"))}");
-            Console.WriteLine($"Content Length: {response.Content.Headers.ContentLength}");
+            _logger.LogDebug("Create project response. Status: {StatusCode}", response.StatusCode);
             
             if (response.IsSuccessStatusCode)
             {
                 // Check if content is empty or not JSON
                 if (string.IsNullOrWhiteSpace(content))
                 {
-                    Console.WriteLine("Response content is empty");
+                    _logger.LogWarning("Response content is empty");
                     return new ApiResponseDto<ProjectDto> 
                     { 
                         Success = false, 
@@ -128,13 +128,12 @@ public class TicketManagementApiClient
                 try
                 {
                     var result = JsonSerializer.Deserialize<ApiResponseDto<ProjectDto>>(content, _jsonOptions);
-                    Console.WriteLine($"Deserialized result: Success={result?.Success}, Data={result?.Data?.Name}, Message={result?.Message}");
                     return result;
                 }
                 catch (JsonException ex)
                 {
-                    Console.WriteLine($"JSON deserialization failed: {ex.Message}");
-                    Console.WriteLine($"Content that failed to deserialize: {content}");
+                    _logger.LogError(ex, "JSON deserialization failed");
+                    _logger.LogDebug("Content that failed to deserialize: {Content}", content);
                     return new ApiResponseDto<ProjectDto> 
                     { 
                         Success = false, 
@@ -145,7 +144,7 @@ public class TicketManagementApiClient
             else
             {
                 // Log the error for debugging
-                Console.WriteLine($"Create project failed. Status: {response.StatusCode}, Content: {content}");
+                _logger.LogError("Create project failed. Status: {StatusCode}", response.StatusCode);
                 
                 var errorMessage = response.StatusCode switch
                 {
@@ -164,7 +163,7 @@ public class TicketManagementApiClient
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Exception in CreateProjectAsync: {ex.Message}");
+            _logger.LogError(ex, "Exception in CreateProjectAsync");
             return new ApiResponseDto<ProjectDto> 
             { 
                 Success = false, 
@@ -238,7 +237,7 @@ public class TicketManagementApiClient
             var response = await _httpClient.PostAsJsonAsync($"api/tickets/project/{projectId}", createTicket);
             var content = await response.Content.ReadAsStringAsync();
             
-            Console.WriteLine($"CreateTicket Response - Status: {response.StatusCode}, Content: {content}");
+            _logger.LogDebug("CreateTicket Response - Status: {StatusCode}", response.StatusCode);
             
             if (response.IsSuccessStatusCode)
             {
@@ -250,19 +249,17 @@ public class TicketManagementApiClient
                 try
                 {
                     var errorResponse = JsonSerializer.Deserialize<ApiResponseDto<TicketDto>>(content, _jsonOptions);
-                    Console.WriteLine($"CreateTicket Error Response: Success={errorResponse?.Success}, Message='{errorResponse?.Message}', Errors={errorResponse?.Errors?.Count}");
                     return errorResponse;
                 }
                 catch
                 {
-                    Console.WriteLine($"Failed to parse error response: {content}");
                     return null;
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"CreateTicket Exception: {ex.Message}");
+            _logger.LogError(ex, "Operation failed");
             return null;
         }
     }
@@ -320,19 +317,17 @@ public class TicketManagementApiClient
                 try
                 {
                     var errorResponse = JsonSerializer.Deserialize<ApiResponseDto<TicketAssignmentDto>>(content, _jsonOptions);
-                    Console.WriteLine($"AssignTicket Error Response: Status={response.StatusCode}, Message='{errorResponse?.Message}'");
                     return errorResponse;
                 }
                 catch
                 {
-                    Console.WriteLine($"Failed to parse assign ticket error response: {content}");
                     return null;
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"AssignTicket Exception: {ex.Message}");
+            _logger.LogError(ex, "Operation failed");
             return null;
         }
     }
@@ -551,7 +546,6 @@ public class TicketManagementApiClient
             var content = await response.Content.ReadAsStringAsync();
             
             // Log the request and response for debugging
-            Console.WriteLine($"CreateOrganization Response - Status: {response.StatusCode}, Content: {content}");
             
             if (response.IsSuccessStatusCode)
             {
@@ -567,10 +561,8 @@ public class TicketManagementApiClient
                     // Log error details
                     if (errorResponse != null)
                     {
-                        Console.WriteLine($"API Error - Success: {errorResponse.Success}, Message: {errorResponse.Message}");
                         if (errorResponse.Errors?.Any() == true)
                         {
-                            Console.WriteLine($"API Errors: {string.Join(", ", errorResponse.Errors)}");
                         }
                     }
                     
@@ -578,8 +570,6 @@ public class TicketManagementApiClient
                 }
                 catch (JsonException jsonEx)
                 {
-                    Console.WriteLine($"Failed to parse error response: {jsonEx.Message}");
-                    Console.WriteLine($"Raw response content: {content}");
                     
                     // If parsing fails, return a generic error
                     return new ApiResponseDto<OrganizationDto>
@@ -593,7 +583,6 @@ public class TicketManagementApiClient
         }
         catch (HttpRequestException ex)
         {
-            Console.WriteLine($"HTTP error creating organization: {ex.Message}");
             return new ApiResponseDto<OrganizationDto>
             {
                 Success = false,
@@ -603,7 +592,6 @@ public class TicketManagementApiClient
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error creating organization: {ex.Message}");
             return new ApiResponseDto<OrganizationDto>
             {
                 Success = false,
@@ -861,11 +849,59 @@ public class TicketManagementApiClient
     {
         try
         {
-            return await _httpClient.GetFromJsonAsync<ApiResponseDto<List<SystemAdminDto>>>("api/users/system-admins", _jsonOptions);
+            var response = await _httpClient.GetAsync("api/users/system-admins");
+            var content = await response.Content.ReadAsStringAsync();
+            
+            
+            if (response.IsSuccessStatusCode)
+            {
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    _logger.LogWarning("Response content is empty");
+                    return new ApiResponseDto<List<SystemAdminDto>> 
+                    { 
+                        Success = false, 
+                        Message = "Empty response from server",
+                        Data = new List<SystemAdminDto>()
+                    };
+                }
+                
+                try
+                {
+                    var result = JsonSerializer.Deserialize<ApiResponseDto<List<SystemAdminDto>>>(content, _jsonOptions);
+                    return result;
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogError(ex, "JSON deserialization failed");
+                    _logger.LogDebug("Content that failed to deserialize: {Content}", content);
+                    return new ApiResponseDto<List<SystemAdminDto>> 
+                    { 
+                        Success = false, 
+                        Message = $"Invalid JSON response: {ex.Message}",
+                        Data = new List<SystemAdminDto>()
+                    };
+                }
+            }
+            else
+            {
+                return new ApiResponseDto<List<SystemAdminDto>> 
+                { 
+                    Success = false, 
+                    Message = $"HTTP {response.StatusCode}",
+                    Data = new List<SystemAdminDto>()
+                };
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return null;
+            _logger.LogError(ex, "Operation failed");
+            return new ApiResponseDto<List<SystemAdminDto>> 
+            { 
+                Success = false, 
+                Message = $"Exception: {ex.Message}",
+                Data = new List<SystemAdminDto>()
+            };
         }
     }
 

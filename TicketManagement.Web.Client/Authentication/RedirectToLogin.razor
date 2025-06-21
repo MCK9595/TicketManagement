@@ -33,7 +33,6 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error in RedirectToLogin: {ex.Message}");
             // Fallback redirect to login
             await JSRuntime.InvokeVoidAsync("window.location.assign", "/authentication/login");
         }

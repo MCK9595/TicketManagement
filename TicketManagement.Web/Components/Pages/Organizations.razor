@@ -14,9 +14,12 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1><span class="bi bi-building" aria-hidden="true"></span> Organizations</h1>
-    <button class="btn btn-primary" @onclick="ShowCreateOrganizationModal" @onclick:preventDefault="true">
-        <span class="bi bi-plus-circle" aria-hidden="true"></span> New Organization
-    </button>
+    @if (isSystemAdmin)
+    {
+        <button class="btn btn-primary" @onclick="ShowCreateOrganizationModal" @onclick:preventDefault="true">
+            <span class="bi bi-plus-circle" aria-hidden="true"></span> New Organization
+        </button>
+    }
 </div>
 
 @if (isLoading)
@@ -178,10 +181,29 @@ else
     private OrganizationFormModel organizationForm = new();
     private OrganizationDto? currentOrganization;
     private string? errorMessage;
+    private bool isSystemAdmin = false;
 
     protected override async Task OnInitializedAsync()
     {
+        await CheckSystemAdminStatus();
         await LoadOrganizations();
+    }
+
+    private async Task CheckSystemAdminStatus()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (authState.User.Identity?.IsAuthenticated == true)
+            {
+                isSystemAdmin = authState.User.IsInRole("system-admin");
+            }
+        }
+        catch (Exception)
+        {
+            // Silently handle errors - user just won't see create button
+            isSystemAdmin = false;
+        }
     }
 
     private async Task LoadOrganizations()

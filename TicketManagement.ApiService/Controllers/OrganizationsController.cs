@@ -258,6 +258,7 @@ public class OrganizationsController : ControllerBase
     /// 新しい組織を作成
     /// </summary>
     [HttpPost]
+    [Authorize(Policy = "SystemAdmin")]
     public async Task<ActionResult<ApiResponseDto<OrganizationDto>>> CreateOrganization([FromBody] CreateOrganizationDto dto)
     {
         try

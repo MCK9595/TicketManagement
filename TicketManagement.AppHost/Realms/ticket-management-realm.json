@@ -25,6 +25,10 @@
       {
         "name": "admin",
         "description": "Administrator role"
+      },
+      {
+        "name": "system-admin",
+        "description": "System Administrator role with full system access"
       }
     ],
     "client": {}
@@ -45,7 +49,7 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["user", "admin"]
+      "realmRoles": ["user", "admin", "system-admin"]
     },
     {
       "username": "testuser",
@@ -68,14 +72,14 @@
       "enabled": true,
       "emailVerified": false,
       "serviceAccountClientId": "admin-cli",
-      "realmRoles": ["admin"]
+      "realmRoles": ["admin", "system-admin"]
     },
     {
       "username": "service-account-ticket-management-service",
       "enabled": true,
       "emailVerified": false,
       "serviceAccountClientId": "ticket-management-service",
-      "realmRoles": ["admin"],
+      "realmRoles": ["admin", "system-admin"],
       "clientRoles": {
         "realm-management": ["manage-users", "view-users", "create-client", "manage-clients", "query-users", "manage-realm"],
         "account": ["manage-account", "view-profile"]
@@ -399,7 +403,9 @@
           "config": {
             "user.attribute": "foo",
             "access.token.claim": "true",
-            "claim.name": "realm_access.roles",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "realm_access",
             "jsonType.label": "String",
             "multivalued": "true"
           }

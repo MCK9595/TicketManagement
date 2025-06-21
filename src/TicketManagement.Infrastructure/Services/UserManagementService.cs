@@ -897,12 +897,60 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            return await _context.SystemAdmins
-                .AnyAsync(sa => sa.UserId == userId && sa.IsActive);
+            // Check if current request user has system-admin role
+            var currentUser = _httpContextAccessor.HttpContext?.User;
+            if (currentUser?.Identity?.IsAuthenticated == true)
+            {
+                var currentUserId = currentUser.FindFirst("sub")?.Value ?? 
+                                  currentUser.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                
+                // If checking for current user, use claims
+                if (currentUserId == userId)
+                {
+                    return currentUser.IsInRole("system-admin");
+                }
+            }
+            
+            // For other users, query Keycloak admin API
+            return await CheckUserRoleInKeycloak(userId, "system-admin");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error checking if user {UserId} is system admin", userId);
+            return false;
+        }
+    }
+
+    private async Task<bool> CheckUserRoleInKeycloak(string userId, string roleName)
+    {
+        try
+        {
+            // Get access token for Keycloak admin API
+            var token = await GetKeycloakAdminToken();
+            if (string.IsNullOrEmpty(token))
+            {
+                return false;
+            }
+
+            // Query user roles from Keycloak
+            var keycloakUrl = _configuration["Authentication:Keycloak:Authority"];
+            var realmName = _configuration["Authentication:Keycloak:Realm"];
+            
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            
+            var response = await _httpClient.GetAsync($"{keycloakUrl}/admin/realms/{realmName}/users/{userId}/role-mappings/realm");
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var roles = JsonSerializer.Deserialize<List<KeycloakRoleDto>>(content, _jsonOptions);
+                return roles?.Any(r => r.Name == roleName) == true;
+            }
+            
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking user role in Keycloak for user {UserId}", userId);
             return false;
         }
     }
@@ -1055,4 +1103,61 @@ public class UserManagementService : IUserManagementService
         _logger.LogWarning("No Keycloak configuration found, using fallback URL: {FallbackUrl}", fallbackUrl);
         return fallbackUrl;
     }
+
+    private async Task<string?> GetKeycloakAdminToken()
+    {
+        try
+        {
+            var keycloakUrl = _configuration["Authentication:Keycloak:Authority"];
+            var realm = _configuration["Authentication:Keycloak:Realm"];
+            var clientId = "ticket-management-service";
+            var clientSecret = "ticket-management-service-secret";
+
+            var tokenUrl = $"{keycloakUrl}/realms/{realm}/protocol/openid-connect/token";
+            
+            var formData = new Dictionary<string, string>
+            {
+                {"grant_type", "client_credentials"},
+                {"client_id", clientId},
+                {"client_secret", clientSecret}
+            };
+
+            var formContent = new FormUrlEncodedContent(formData);
+            var response = await _httpClient.PostAsync(tokenUrl, formContent);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var tokenResponse = JsonSerializer.Deserialize<KeycloakTokenResponse>(content, _jsonOptions);
+                return tokenResponse?.AccessToken;
+            }
+            
+            _logger.LogWarning("Failed to get Keycloak admin token. Status: {StatusCode}", response.StatusCode);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting Keycloak admin token");
+            return null;
+        }
+    }
+}
+
+public class KeycloakRoleDto
+{
+    public string? Id { get; set; }
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+}
+
+public class KeycloakTokenResponse
+{
+    [JsonPropertyName("access_token")]
+    public string? AccessToken { get; set; }
+    
+    [JsonPropertyName("token_type")]
+    public string? TokenType { get; set; }
+    
+    [JsonPropertyName("expires_in")]
+    public int ExpiresIn { get; set; }
 }

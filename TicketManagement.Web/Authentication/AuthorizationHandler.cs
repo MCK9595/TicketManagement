@@ -19,8 +19,8 @@ public class AuthorizationHandler(
 
         var accessToken = await httpContext.GetTokenAsync("access_token");
         
-        logger.LogDebug("AuthorizationHandler - Request: {Method} {Uri}", request.Method, request.RequestUri);
-        logger.LogDebug("AuthorizationHandler - Access token present: {HasToken}", !string.IsNullOrWhiteSpace(accessToken));
+        logger.LogInformation("AuthorizationHandler - Request: {Method} {Uri}", request.Method, request.RequestUri);
+        logger.LogInformation("AuthorizationHandler - Access token present: {HasToken}", !string.IsNullOrWhiteSpace(accessToken));
         
         // Check if token is expired
         if (!string.IsNullOrWhiteSpace(accessToken))
@@ -41,7 +41,7 @@ public class AuthorizationHandler(
                 
                 request.Headers.Authorization = 
                     new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-                logger.LogDebug("AuthorizationHandler - Added Bearer token to request");
+                logger.LogInformation("AuthorizationHandler - Added Bearer token to request");
             }
             catch (Exception ex)
             {

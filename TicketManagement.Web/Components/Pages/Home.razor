@@ -302,7 +302,6 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading user organizations: {ex.Message}");
             userOrganizations = new List<UserOrganizationDto>();
         }
     }
@@ -344,7 +343,6 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading dashboard data: {ex.Message}");
             recentProjects = new List<ProjectDto>();
             recentTickets = new List<TicketDto>();
             ResetStatistics();

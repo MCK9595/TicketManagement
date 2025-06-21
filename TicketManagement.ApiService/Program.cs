@@ -118,12 +118,53 @@ builder.Services.AddAuthentication()
                 OnTokenValidated = context =>
                 {
                     var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                    if (context.SecurityToken is System.IdentityModel.Tokens.Jwt.JwtSecurityToken jwt)
+                    logger.LogDebug("JWT token validation completed, processing role claims");
+                    
+                    
+                    // Instead of replacing the entire principal, let's add role claims to the existing identity
+                    if (context.Principal?.Identity is System.Security.Claims.ClaimsIdentity identity)
                     {
-                        logger.LogDebug("Token validated. Issuer: {Issuer}, Audience: {Audience}, Claims: {Claims}",
-                            jwt.Issuer,
-                            string.Join(", ", jwt.Audiences),
-                            string.Join(", ", jwt.Claims.Select(c => $"{c.Type}={c.Value}")));
+                        logger.LogDebug("Processing JWT claims for role mapping");
+                        
+                        // Extract roles from individual realm_access claims that are already in the identity
+                        var realmAccessClaims = identity.Claims.Where(c => c.Type == "realm_access").ToList();
+                        if (realmAccessClaims.Any())
+                        {
+                            logger.LogDebug("Found {Count} realm_access claims", realmAccessClaims.Count);
+                            foreach (var realmAccessClaim in realmAccessClaims)
+                            {
+                                var roleValue = realmAccessClaim.Value;
+                                if (!string.IsNullOrEmpty(roleValue))
+                                {
+                                    // Add the role directly to the existing identity
+                                    identity.AddClaim(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, roleValue));
+                                    logger.LogDebug("Added role claim from realm_access: {Role}", roleValue);
+                                }
+                            }
+                        }
+                        
+                        // Also check for existing role claims and ensure they're properly mapped
+                        var existingRoleClaims = identity.Claims
+                            .Where(c => c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role")
+                            .ToList();
+                        
+                        logger.LogDebug("Found {Count} existing role claims", existingRoleClaims.Count);
+                        
+                        foreach (var roleClaim in existingRoleClaims)
+                        {
+                            // Add role claims with standard ClaimTypes.Role if not already present
+                            if (!identity.HasClaim(System.Security.Claims.ClaimTypes.Role, roleClaim.Value))
+                            {
+                                identity.AddClaim(new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, roleClaim.Value));
+                                logger.LogDebug("Added role claim from existing claim: {Role}", roleClaim.Value);
+                            }
+                        }
+                        
+                        logger.LogDebug("JWT role mapping completed. IsAuthenticated: {IsAuthenticated}", identity.IsAuthenticated);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Could not cast context.Principal.Identity to ClaimsIdentity");
                     }
                     return Task.CompletedTask;
                 }
@@ -166,7 +207,7 @@ builder.Services.AddAuthorizationBuilder()
     
     // System-level policies
     .AddPolicy("SystemAdmin", policy =>
-        policy.Requirements.Add(new TicketManagement.ApiService.Authorization.SystemRoleRequirement(TicketManagement.Core.Enums.SystemRole.SystemAdmin)));
+        policy.RequireRole("system-admin"));
 
 // Register authorization handlers
 builder.Services.AddScoped<IAuthorizationHandler, TicketManagement.ApiService.Authorization.OrganizationRoleHandler>();
@@ -282,30 +323,8 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// Add authentication/authorization debugging middleware in development
-if (app.Environment.IsDevelopment())
-{
-    app.Use(async (context, next) =>
-    {
-        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
-        
-        logger.LogDebug("Request Path: {Path}", context.Request.Path);
-        logger.LogDebug("User authenticated: {IsAuthenticated}", context.User.Identity?.IsAuthenticated);
-        
-        if (context.User.Identity?.IsAuthenticated == true)
-        {
-            logger.LogDebug("User claims: {Claims}", 
-                string.Join(", ", context.User.Claims.Select(c => $"{c.Type}={c.Value}")));
-        }
-        
-        await next();
-        
-        if (context.Response.StatusCode == 401)
-        {
-            logger.LogWarning("Unauthorized response for path: {Path}", context.Request.Path);
-        }
-    });
-}
+// Add authentication/authorization debugging middleware AFTER authentication
+// This middleware will be added after UseAuthentication() to see the actual authenticated user
 
 // Add comprehensive logging middleware
 app.UseEnhancedLogging();
@@ -326,6 +345,46 @@ app.UseCors("DefaultPolicy");
 // Use authentication and authorization
 app.UseAuthentication();
 app.UseAuthenticationLogging();
+
+// Add authentication/authorization debugging middleware AFTER authentication
+if (app.Environment.IsDevelopment())
+{
+    app.Use(async (context, next) =>
+    {
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        
+        logger.LogDebug("After Auth - Request Path: {Path}", context.Request.Path);
+        logger.LogDebug("After Auth - User authenticated: {IsAuthenticated}", context.User.Identity?.IsAuthenticated);
+        logger.LogDebug("After Auth - User identity type: {IdentityType}", context.User.Identity?.GetType().Name);
+        logger.LogDebug("After Auth - User identity name: {IdentityName}", context.User.Identity?.Name);
+        logger.LogDebug("After Auth - Authentication type: {AuthType}", context.User.Identity?.AuthenticationType);
+        
+        if (context.User.Identity?.IsAuthenticated == true)
+        {
+            logger.LogDebug("After Auth - User claims count: {Count}", context.User.Claims.Count());
+            logger.LogDebug("After Auth - User claims: {Claims}", 
+                string.Join(", ", context.User.Claims.Select(c => $"{c.Type}={c.Value}")));
+            logger.LogDebug("After Auth - User.IsInRole('system-admin'): {IsSystemAdmin}", context.User.IsInRole("system-admin"));
+            
+            // Log specific role claims
+            var roleClaims = context.User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role);
+            logger.LogDebug("After Auth - Role claims: {RoleClaims}", 
+                string.Join(", ", roleClaims.Select(c => c.Value)));
+        }
+        
+        await next();
+        
+        if (context.Response.StatusCode == 401)
+        {
+            logger.LogWarning("After Auth - Unauthorized response for path: {Path}", context.Request.Path);
+        }
+        else if (context.Response.StatusCode == 403)
+        {
+            logger.LogWarning("After Auth - Forbidden response for path: {Path}", context.Request.Path);
+        }
+    });
+}
+
 app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
